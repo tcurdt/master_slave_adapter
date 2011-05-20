@@ -97,6 +97,19 @@ module ActiveRecord
           end
         end
 
+        def with_slave
+          if master_enabled?
+            disable_master
+            begin
+              yield
+            ensure
+              enable_master
+            end
+          else
+            yield
+          end
+        end
+
         def master_enabled?
           Thread.current[ :master_slave_enabled ]
         end

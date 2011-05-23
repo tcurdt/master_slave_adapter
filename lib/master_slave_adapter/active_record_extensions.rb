@@ -25,6 +25,28 @@ ActiveRecord::Base.class_eval do
       end
     end
 
+    #
+    # Call this method to force a certain binlog position.
+    # Going to the slave if it's already at the position otherwise
+    # or falling back to master.
+    #
+    # consistency = ActiveRecord::Base.with_consistency(consistency) do
+    #   User.count( :conditions => { :login => 'testuser' } )
+    # end
+    #
+    #
+    def with_slave
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_slave do
+        yield
+      end
+    end
+
+    def with_consistency(consistency)
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_consistency(consistency) do
+        yield
+      end
+    end
+
     def master_slave_connection( config )
       config = config.symbolize_keys
       raise "You must provide a configuration for the master database - #{config.inspect}" if config[:master].blank?

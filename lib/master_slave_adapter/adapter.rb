@@ -110,6 +110,11 @@ module ActiveRecord
           end
         end
 
+        def with_consistency(consistency)
+          yield
+          consistency
+        end
+
         def master_enabled?
           Thread.current[ :master_slave_enabled ]
         end

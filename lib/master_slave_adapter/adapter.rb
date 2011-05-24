@@ -4,6 +4,19 @@ module ActiveRecord
 
     class MasterSlaveAdapter
 
+      class Consistency
+        include Comparable
+        def initialize(file, position)
+          @file, @position = file, position
+        end
+        def <=>(other)
+          @file <=> other.file && @position <=> other.position
+        end
+        def inspect
+          "#{@file}@#{position}"
+        end
+     end
+
       SELECT_METHODS = [ :select_all, :select_one, :select_rows, :select_value, :select_values ]
 
       include ActiveSupport::Callbacks
@@ -17,7 +30,7 @@ module ActiveRecord
       attr_accessor :disable_connection_test
 
 
-      delegate :select_all, :select_one, :select_rows, :select_value, :select_values, :to => :slave_connection
+      delegate :select_all, :select_one, :select_rows, :select_value, :select_values, :to => :pick
 
       def initialize( config )
         if config[:master].blank?
@@ -33,6 +46,24 @@ module ActiveRecord
           connect_to_master
           connect_to_slave
         end
+      end
+
+      def insert(sql, *args)
+        result = self.master_connection.insert(sql, *args)
+        update_consistency
+        result
+      end
+
+      def update(sql, *args)
+        result = self.master_connection.update(sql, *args)
+        update_consistency
+        result
+      end
+
+      def delete(sql, *args)
+        result = self.master_connection.delete(sql, *args)
+        update_consistency
+        result
       end
 
       def slave_connection
@@ -110,9 +141,12 @@ module ActiveRecord
           end
         end
 
+
         def with_consistency(consistency)
+          Thread.current[:consistency] = consistency
+          Thread.current[:try_slave] = true
           yield
-          consistency
+          Thread.current[:consistency]
         end
 
         def master_enabled?
@@ -130,6 +164,27 @@ module ActiveRecord
       end
 
       private
+
+      def pick
+        if Thread.current[:try_slave] && status = self.slave_connection.select_one("SHOW SLAVE STATUS")
+          cur_consistency = Consistency.new(status[:relay_master_log_file], status[:relay_log_pos])
+          req_consistency = Thread.current[:consistency]
+          if !req_consistency || cur_consistency >= req_consistency
+            self.slave_connection
+          else
+            Thread.current[:try_slave] = false
+            self.master_connection
+          end
+        else
+          self.master_connection
+        end
+      end
+
+      def update_consistency
+        if status = self.slave_connection.select_one("SHOW MASTER STATUS")
+          Thread.current[:consistency] = Consistency.new(status[:master_log_file], status[:log_pos])
+        end
+      end
 
       def connect_to_master
         @master_connection ||= ActiveRecord::Base.send( "#{self.master_config[:adapter]}_connection", self.master_config )

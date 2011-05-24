@@ -4,16 +4,19 @@ module ActiveRecord
 
     class MasterSlaveAdapter
 
-      class Consistency
+      class Clock
         include Comparable
         def initialize(file, position)
           @file, @position = file, position
         end
         def <=>(other)
-          @file <=> other.file && @position <=> other.position
+          @file == other.file ? @position <=> other.position : @file <=> other.file
         end
         def inspect
           "#{@file}@#{position}"
+        end
+        def self.ZERO
+          @zero |= Clock.new('', 0)
         end
      end
 
@@ -30,7 +33,7 @@ module ActiveRecord
       attr_accessor :disable_connection_test
 
 
-      delegate :select_all, :select_one, :select_rows, :select_value, :select_values, :to => :pick
+      delegate :select_all, :select_one, :select_rows, :select_value, :select_values, :to => :select_connection
 
       def initialize( config )
         if config[:master].blank?
@@ -49,21 +52,21 @@ module ActiveRecord
       end
 
       def insert(sql, *args)
-        result = self.master_connection.insert(sql, *args)
-        update_consistency
-        result
+        on_write do
+          self.master_connection.insert(sql, *args)
+        end
       end
 
       def update(sql, *args)
-        result = self.master_connection.update(sql, *args)
-        update_consistency
-        result
+        on_write do
+          self.master_connection.update(sql, *args)
+        end
       end
 
       def delete(sql, *args)
-        result = self.master_connection.delete(sql, *args)
-        update_consistency
-        result
+        on_write do
+          self.master_connection.delete(sql, *args)
+        end
       end
 
       def slave_connection
@@ -142,11 +145,16 @@ module ActiveRecord
         end
 
 
-        def with_consistency(consistency)
-          Thread.current[:consistency] = consistency
-          Thread.current[:try_slave] = true
+        def with_consistency(clock)
+          # clock is only motonic increasing
+          Thread.current[:clock] = [ Thread.current[:clock] || Clock::ZERO, clock ].max
+          # explicitly ask for a evaluation to select a connection
+          Thread.current[:select_connection] = nil
           yield
-          Thread.current[:consistency]
+          # clear reference
+          Thread.current[:select_connection] = nil
+          # return the latest clock, might or might not have been changed
+          Thread.current[:clock]
         end
 
         def master_enabled?
@@ -165,24 +173,51 @@ module ActiveRecord
 
       private
 
+      def on_write
+        result = yield
+
+        # update the clock
+        if status = self.slave_connection.select_one("SHOW MASTER STATUS")
+          # update clock to the lastest status
+          Thread.current[:clock] = Clock.new(status[:master_log_file], status[:log_pos])
+        else
+          # means we are in master only setup so a clock is not required
+        end
+
+        # it's a write so from now on we use the master connection
+        # as replication is not likely to be that fast
+        Thread.current[:select_connection] = self.master_connection
+      end
+
       def pick
-        if Thread.current[:try_slave] && status = self.slave_connection.select_one("SHOW SLAVE STATUS")
-          cur_consistency = Consistency.new(status[:relay_master_log_file], status[:relay_log_pos])
-          req_consistency = Thread.current[:consistency]
-          if !req_consistency || cur_consistency >= req_consistency
-            self.slave_connection
+        if required_clock = Thread.current[:clock]
+          # we are in a with_consistency block
+          if status = self.slave_connection.select_one("SHOW SLAVE STATUS")
+            slave_clock = Clock.new(status[:relay_master_log_file], status[:relay_log_pos])
+            if slave_clock >= required_clock
+              # slave is safe to use
+              self.slave_connection
+            else
+              # slave is not there yet
+              self.master_connection
+            end
           else
-            Thread.current[:try_slave] = false
+            # not getting slave status, better turn to master
             self.master_connection
           end
         else
-          self.master_connection
+          # no with_consistency, normal behaviour for select is to go to slave
+          self.slave_connection
         end
       end
 
-      def update_consistency
-        if status = self.slave_connection.select_one("SHOW MASTER STATUS")
-          Thread.current[:consistency] = Consistency.new(status[:master_log_file], status[:log_pos])
+      def select_connection
+        if Thread.current[:select_connection] == nil
+          # has not picked a connection yet
+          Thread.current[:select_connection] = pick
+        else
+          # we stick with the current connection
+          Thread.current[:select_connection]
         end
       end
 

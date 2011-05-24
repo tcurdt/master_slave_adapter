@@ -6,17 +6,18 @@ module ActiveRecord
 
       class Clock
         include Comparable
+        attr_reader :file, :position
         def initialize(file, position)
-          @file, @position = file, position
+          @file, @position = file, position.to_i
         end
         def <=>(other)
           @file == other.file ? @position <=> other.position : @file <=> other.file
         end
-        def inspect
-          "#{@file}@#{position}"
+        def to_s
+          "#{@file}@#{@position}"
         end
-        def self.ZERO
-          @zero |= Clock.new('', 0)
+        def self.zero
+          @zero ||= Clock.new('', 0)
         end
      end
 
@@ -42,13 +43,15 @@ module ActiveRecord
         self.slave_config = config.symbolize_keys
         self.master_config = self.slave_config.delete(:master).symbolize_keys
         self.slave_config[:adapter] = self.slave_config.delete(:master_slave_adapter)
-        self.master_config[ :adapter ] ||= self.slave_config[:adapter]
+        self.master_config[:adapter] ||= self.slave_config[:adapter]
         self.disable_connection_test = self.slave_config.delete( :disable_connection_test ) == 'true'
         self.connections = []
         if self.slave_config.delete( :eager_load_connections ) == 'true'
           connect_to_master
           connect_to_slave
         end
+        # puts "TC: master #{self.master_config[:socket]}, #{self.master_connection.select_one('show master status')}"
+        # puts "TC: slave #{self.slave_config[:socket]}, #{self.slave_connection.select_one('show slave status')}"
       end
 
       def insert(sql, *args)
@@ -147,7 +150,7 @@ module ActiveRecord
 
         def with_consistency(clock)
           # clock is only motonic increasing
-          Thread.current[:clock] = [ Thread.current[:clock] || Clock::ZERO, clock ].max
+          Thread.current[:clock] = [ Thread.current[:clock] || Clock::zero, clock || Clock::zero ].max
           # explicitly ask for a evaluation to select a connection
           Thread.current[:select_connection] = nil
           yield
@@ -158,15 +161,15 @@ module ActiveRecord
         end
 
         def master_enabled?
-          Thread.current[ :master_slave_enabled ]
+          Thread.current[:master_slave_enabled]
         end
 
         def enable_master
-          Thread.current[ :master_slave_enabled ] = true
+          Thread.current[:master_slave_enabled] = true
         end
 
         def disable_master
-          Thread.current[ :master_slave_enabled ] = nil
+          Thread.current[:master_slave_enabled] = nil
         end
 
       end
@@ -177,9 +180,9 @@ module ActiveRecord
         result = yield
 
         # update the clock
-        if status = self.slave_connection.select_one("SHOW MASTER STATUS")
+        if status = connect_to_master.select_one("SHOW MASTER STATUS")
           # update clock to the lastest status
-          Thread.current[:clock] = Clock.new(status[:master_log_file], status[:log_pos])
+          Thread.current[:clock] = Clock.new(status['File'], status['Position'])
         else
           # means we are in master only setup so a clock is not required
         end
@@ -191,13 +194,15 @@ module ActiveRecord
 
       def pick
         if required_clock = Thread.current[:clock]
-          # we are in a with_consistency block
-          if status = self.slave_connection.select_one("SHOW SLAVE STATUS")
-            slave_clock = Clock.new(status[:relay_master_log_file], status[:relay_log_pos])
+          # check the slave for it's replication state
+          if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
+            slave_clock = Clock.new(status['Master_Log_File'], status['Read_Master_Log_Pos'])
             if slave_clock >= required_clock
+              puts "TC: slave is up to speed"
               # slave is safe to use
               self.slave_connection
             else
+              puts "TC: slave lags, using master"
               # slave is not there yet
               self.master_connection
             end
@@ -206,19 +211,19 @@ module ActiveRecord
             self.master_connection
           end
         else
-          # no with_consistency, normal behaviour for select is to go to slave
+          # not within with_consistency block, normal behaviour for select is to go to slave
           self.slave_connection
         end
       end
 
       def select_connection
-        if Thread.current[:select_connection] == nil
+        if !Thread.current[:select_connection]
           # has not picked a connection yet
           Thread.current[:select_connection] = pick
-        else
-          # we stick with the current connection
-          Thread.current[:select_connection]
         end
+        puts "TC: select on #{Thread.current[:select_connection] == self.master_connection ? 'master' : 'slave' }"
+        # we stick with the current connection
+        Thread.current[:select_connection]
       end
 
       def connect_to_master

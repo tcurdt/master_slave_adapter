@@ -50,8 +50,6 @@ module ActiveRecord
           connect_to_master
           connect_to_slave
         end
-        # puts "TC: master #{self.master_config[:socket]}, #{self.master_connection.select_one('show master status')}"
-        # puts "TC: slave #{self.slave_config[:socket]}, #{self.slave_connection.select_one('show slave status')}"
       end
 
       def insert(sql, *args)
@@ -72,16 +70,12 @@ module ActiveRecord
         end
       end
 
-      def slave_connection
-        if ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.master_enabled?
-          master_connection
-        elsif @master_connection && @master_connection.open_transactions > 0
-          master_connection
-        else
-          connect_to_slave
+      def commit_db_transaction()
+        on_write do
+          self.master_connection.commit_db_transaction()
         end
       end
-
+  
       def reconnect!
         @active = true
         self.connections.each { |c| c.reconnect! }
@@ -104,6 +98,10 @@ module ActiveRecord
         connect_to_master
       end
 
+      def slave_connection
+        connect_to_slave
+      end
+
       def connections
         [ @master_connection, @slave_connection ].compact
       end
@@ -122,108 +120,107 @@ module ActiveRecord
       class << self
 
         def with_master
-          if master_enabled?
-            yield
-          else
-            enable_master
-            begin
-              yield
-            ensure
-              disable_master
-            end
-          end
+          Thread.current[:master_slave_select_connection] = :master
+          yield
+          Thread.current[:master_slave_select_connection] = nil
         end
 
         def with_slave
-          if master_enabled?
-            disable_master
-            begin
-              yield
-            ensure
-              enable_master
-            end
-          else
-            yield
-          end
+          Thread.current[:master_slave_select_connection] = :slave
+          yield
+          Thread.current[:master_slave_select_connection] = nil
         end
 
 
         def with_consistency(clock)
           # clock is only motonic increasing
-          Thread.current[:clock] = [ Thread.current[:clock] || Clock::zero, clock || Clock::zero ].max
-          # explicitly ask for a evaluation to select a connection
-          Thread.current[:select_connection] = nil
+          Thread.current[:master_slave_clock] = [ Thread.current[:master_slave_clock] || Clock::zero, clock || Clock::zero ].max
+          # explicitly ask for an evaluation to pick a connection
+          Thread.current[:master_slave_select_connection] = nil
           yield
-          # clear reference
-          Thread.current[:select_connection] = nil
+          # clear selection
+          Thread.current[:master_slave_select_connection] = nil
           # return the latest clock, might or might not have been changed
-          Thread.current[:clock]
+          Thread.current[:master_slave_clock]
         end
 
-        def master_enabled?
-          Thread.current[:master_slave_enabled]
+        def master_forced?
+          Thread.current[:master_slave_enabled] == true
         end
 
-        def enable_master
-          Thread.current[:master_slave_enabled] = true
-        end
-
-        def disable_master
-          Thread.current[:master_slave_enabled] = nil
+        def master_forced=(state)
+          Thread.current[:master_slave_enabled] = state ? true : nil
         end
 
       end
 
       private
 
-      def on_write
-        result = yield
-
-        # update the clock
-        if status = connect_to_master.select_one("SHOW MASTER STATUS")
-          # update clock to the lastest status
-          Thread.current[:clock] = Clock.new(status['File'], status['Position'])
-        else
-          # means we are in master only setup so a clock is not required
-        end
-
+      def update_clock
+        # update the clock (if there is one)
+        Thread.current[:master_slave_clock] = master_clock || Thread.current[:master_slave_clock]
         # it's a write so from now on we use the master connection
         # as replication is not likely to be that fast
-        Thread.current[:select_connection] = self.master_connection
+        Thread.current[:master_slave_select_connection] = :master
       end
 
-      def pick
-        if required_clock = Thread.current[:clock]
+      def on_write
+        result = yield
+        if !MasterSlaveAdapter.master_forced? && @master_connection.open_transactions == 0
+          update_clock
+        end
+        result
+      end
+
+      def connection_for_clock(required_clock)
+        if required_clock
           # check the slave for it's replication state
-          if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
-            slave_clock = Clock.new(status['Master_Log_File'], status['Read_Master_Log_Pos'])
-            if slave_clock >= required_clock
-              puts "TC: slave is up to speed"
+          if clock = self.slave_clock
+            if clock >= required_clock
+              puts "TC: using slave, it is up to speed #{required_clock} >= #{clock}"
               # slave is safe to use
-              self.slave_connection
+              :slave
             else
-              puts "TC: slave lags, using master"
+              puts "TC: using master, slave is behind #{required_clock} < #{clock}"
               # slave is not there yet
-              self.master_connection
+              :master
             end
           else
             # not getting slave status, better turn to master
-            self.master_connection
+            # maybe this should be logged or raised?
+            :master
           end
         else
-          # not within with_consistency block, normal behaviour for select is to go to slave
-          self.slave_connection
+          # no required clock so slave is good enough
+          :slave
         end
       end
 
       def select_connection
-        if !Thread.current[:select_connection]
-          # has not picked a connection yet
-          Thread.current[:select_connection] = pick
+        # pick the right connection
+        if MasterSlaveAdapter.master_forced? || @master_connection.open_transactions > 0
+          Thread.current[:master_slave_select_connection] = :master
         end
-        puts "TC: select on #{Thread.current[:select_connection] == self.master_connection ? 'master' : 'slave' }"
-        # we stick with the current connection
-        Thread.current[:select_connection]
+        Thread.current[:master_slave_select_connection] ||= connection_for_clock(Thread.current[:master_slave_clock])
+
+        # return the current connection
+        if Thread.current[:master_slave_select_connection] == :slave
+          slave_connection
+        else
+          master_connection
+        end
+      end
+
+      def master_clock
+        if status = connect_to_master.select_one("SHOW MASTER STATUS")
+          Clock.new(status['File'], status['Position'])
+        end
+      end
+
+      def slave_clock
+        if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
+          Clock.new(status['Master_Log_File'], status['Read_Master_Log_Pos'])
+        end
       end
 
       def connect_to_master

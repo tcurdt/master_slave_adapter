@@ -92,12 +92,12 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         end
       end
 
-      it "Should send the method '#{method}' to the slave if no binlog position is given" do
-        @slave_connection.should_receive( method ).with('testing').and_return( true )
-        ActiveRecord::Base.with_consistency(nil) do
-          ActiveRecord::Base.connection.send( method, 'testing' )
-        end
-      end
+      # it "Should send the method '#{method}' to the slave if no binlog position is given" do
+      #   @slave_connection.should_receive( method ).with('testing').and_return( true )
+      #   ActiveRecord::Base.with_consistency(nil) do
+      #     ActiveRecord::Base.connection.send( method, 'testing' )
+      #   end
+      # end
 
     end
 

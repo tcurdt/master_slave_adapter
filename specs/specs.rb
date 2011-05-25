@@ -92,13 +92,6 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         end
       end
 
-      # it "Should send the method '#{method}' to the slave if no binlog position is given" do
-      #   @slave_connection.should_receive( method ).with('testing').and_return( true )
-      #   ActiveRecord::Base.with_consistency(nil) do
-      #     ActiveRecord::Base.connection.send( method, 'testing' )
-      #   end
-      # end
-
     end
 
     ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods.map(&:to_sym).each do |method|
@@ -201,5 +194,57 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     end
 
   end
- 
+
+  describe 'with consistency' do
+    before do
+
+      @database_setup = {
+        :adapter => 'master_slave',
+        :username => 'root',
+        :database => 'slave',
+        :master_slave_adapter => 'test',
+        :master => { :username => 'root', :database => 'master' }
+      }
+
+      ActiveRecord::Base.establish_connection( @database_setup )
+
+      [ @master_connection, @slave_connection ].each do |c|
+        c.stub!( :select_value ).with( "SELECT 1", "test select" ).and_return( true )
+      end
+
+    end
+
+    def master_position(pos)
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.new('', pos)
+    end
+
+    def slave_position(pos)
+      @slave_connection.should_receive('select_one').and_return({ 'Master_Log_File' => '', 'Position' => pos })
+    end
+
+    ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
+
+      it "should send the method '#{method}' to the slave if no clock is given" do
+        ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+        slave_position(0)
+        @slave_connection.should_receive(method).with('testing').and_return(true)
+        old_clock = nil
+        new_clock = ActiveRecord::Base.with_consistency(old_clock) do
+          ActiveRecord::Base.connection.send( method, 'testing' )
+        end
+      end
+
+      it "should send the method '#{method}' to the master if slave hasn't cought up to required clock yet" do
+        ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+        slave_position(0)
+        @master_connection.should_receive(method).with('testing').and_return(true)
+        old_clock = master_position(1)
+        new_clock = ActiveRecord::Base.with_consistency(old_clock) do
+          ActiveRecord::Base.connection.send( method, 'testing' )
+        end
+      end
+
+    end
+
+  end
 end

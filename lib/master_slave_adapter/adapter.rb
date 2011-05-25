@@ -144,6 +144,11 @@ module ActiveRecord
           Thread.current[:master_slave_clock]
         end
 
+        def reset!
+          Thread.current[:master_slave_select_connection] = nil
+          Thread.current[:master_slave_clock] = nil
+        end
+
         def master_forced?
           Thread.current[:master_slave_enabled] == true
         end
@@ -175,7 +180,7 @@ module ActiveRecord
       def connection_for_clock(required_clock)
         if required_clock
           # check the slave for it's replication state
-          if clock = self.slave_clock
+          if clock = slave_clock
             if clock >= required_clock
               puts "TC: using slave, it is up to speed #{required_clock} >= #{clock}"
               # slave is safe to use

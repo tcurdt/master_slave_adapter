@@ -71,23 +71,38 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
 
-      it "Should send the method '#{method}' to the slave connection" do
+      it "should send the method '#{method}' to the slave connection" do
         @master_connection.stub!( :open_transactions ).and_return( 0 )
         @slave_connection.should_receive( method ).with('testing').and_return( true )
         ActiveRecord::Base.connection.send( method, 'testing' )
       end
 
-      it "Should send the method '#{method}' to the master connection if with_master was specified" do
+      it "should send the method '#{method}' to the master connection if with_master was specified" do
         @master_connection.should_receive( method ).with('testing').and_return( true )
         ActiveRecord::Base.with_master do
           ActiveRecord::Base.connection.send( method, 'testing' )
         end
       end
 
-      it "Should send the method '#{method}' to the master connection if there are open transactions" do
+      it "should send the method '#{method}' to the slave connection if with_slave was specified" do
+        @slave_connection.should_receive( method ).with('testing').and_return( true )
+        ActiveRecord::Base.with_slave do
+          ActiveRecord::Base.connection.send( method, 'testing' )
+        end
+      end
+
+      it "should send the method '#{method}' to the master connection if there are open transactions" do
         @master_connection.stub!( :open_transactions ).and_return( 1 )
         @master_connection.should_receive( method ).with('testing').and_return( true )
         ActiveRecord::Base.with_master do
+          ActiveRecord::Base.connection.send( method, 'testing' )
+        end
+      end
+
+      it "should send the method '#{method}' to the master connection if there are open transactions, even in with_slave" do
+        @master_connection.stub!( :open_transactions ).and_return( 1 )
+        @master_connection.should_receive( method ).with('testing').and_return( true )
+        ActiveRecord::Base.with_slave do
           ActiveRecord::Base.connection.send( method, 'testing' )
         end
       end
@@ -96,7 +111,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods.map(&:to_sym).each do |method|
 
-      it "Should send the method '#{method}' from ActiveRecord::ConnectionAdapters::SchemaStatements to the master"  do
+      it "should send the method '#{method}' from ActiveRecord::ConnectionAdapters::SchemaStatements to the master"  do
         @master_connection.should_receive( method ).and_return( true )
         ActiveRecord::Base.connection.send( method )
       end
@@ -105,22 +120,22 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     (ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods.map(&:to_sym) - ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS).each do |method|
 
-      it "Should send the method '#{method}' from ActiveRecord::ConnectionAdapters::DatabaseStatements to the master"  do
+      it "should send the method '#{method}' from ActiveRecord::ConnectionAdapters::DatabaseStatements to the master"  do
         @master_connection.should_receive( method ).and_return( true )
         ActiveRecord::Base.connection.send( method )
       end
 
     end
 
-    it 'Should be a master slave connection' do
+    it 'should be a master slave connection' do
       ActiveRecord::Base.connection.class.should == ActiveRecord::ConnectionAdapters::MasterSlaveAdapter
     end
 
-    it 'Should have a master connection' do
+    it 'should have a master connection' do
       ActiveRecord::Base.connection.master_connection.should == @master_connection
     end
 
-    it 'Should have a slave connection' do
+    it 'should have a slave connection' do
       @master_connection.stub!( :open_transactions ).and_return( 0 )
       ActiveRecord::Base.connection.slave_connection.should == @slave_connection
     end
@@ -145,7 +160,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods.map(&:to_sym).each do |method|
 
-      it "Should not perform the testing select on the master if #{method} is called" do
+      it "should not perform the testing select on the master if #{method} is called" do
         @master_connection.should_not_receive( :select_value ).with( "SELECT 1", "test select" )
         @master_connection.should_receive( method ).with('testing').and_return(true)
         ActiveRecord::Base.connection.send(method, 'testing')
@@ -155,7 +170,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
 
-      it "Should not perform the testing select on the slave if #{method} is called" do
+      it "should not perform the testing select on the slave if #{method} is called" do
         @slave_connection.should_not_receive( :select_value ).with( "SELECT 1", "test select" )
         @slave_connection.should_receive( method ).with('testing').and_return(true)
         ActiveRecord::Base.connection.send(method, 'testing')
@@ -214,12 +229,41 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     end
 
+    def zero
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero
+    end
+
     def master_position(pos)
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.new('', pos)
     end
 
     def slave_position(pos)
-      @slave_connection.should_receive('select_one').and_return({ 'Master_Log_File' => '', 'Position' => pos })
+      if pos.instance_of? Fixnum
+        pos = [ pos ]
+      end
+      values = pos.map { |p| { 'Master_Log_File' => '', 'Position' => p } }
+      @slave_connection.should_receive('select_one').exactly(pos.length).with('SHOW SLAVE STATUS').and_return(*values)
+    end
+
+    it "should properly handle cascading with_consistency blocks" do
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+
+      method = 'select_one'
+
+      slave_position([ zero, zero, zero ])
+      @slave_connection.should_receive(method).exactly(3).times.with('testing').and_return(true)
+
+      old_clock = zero
+      new_clock = ActiveRecord::Base.with_consistency(old_clock) do
+        ActiveRecord::Base.connection.send(method, 'testing')
+
+        ActiveRecord::Base.with_consistency(old_clock) do
+          ActiveRecord::Base.connection.send(method, 'testing')
+        end
+
+        ActiveRecord::Base.connection.send(method, 'testing')
+      end
+      new_clock.should equal(old_clock)
     end
 
     ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
@@ -230,8 +274,10 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         @slave_connection.should_receive(method).with('testing').and_return(true)
         old_clock = nil
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
-          ActiveRecord::Base.connection.send( method, 'testing' )
+          ActiveRecord::Base.connection.send(method, 'testing')
         end
+        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
+        new_clock.should equal(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero)
       end
 
       it "should send the method '#{method}' to the master if slave hasn't cought up to required clock yet" do
@@ -242,6 +288,20 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           ActiveRecord::Base.connection.send( method, 'testing' )
         end
+        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
+        new_clock.should equal(old_clock)
+      end
+
+      it "should send the method '#{method}' to the master connection if there are open transactions" do
+        ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+        @master_connection.stub!(:open_transactions).and_return(1)
+        @master_connection.should_receive(method).with('testing').and_return(true)
+        old_clock = nil
+        new_clock = ActiveRecord::Base.with_consistency(old_clock) do
+          ActiveRecord::Base.connection.send(method, 'testing')
+        end
+        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
+        new_clock.should equal(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero)
       end
 
     end

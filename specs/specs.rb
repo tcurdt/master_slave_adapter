@@ -323,6 +323,22 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         ActiveRecord::Base.connection.send('select_one', 'testing')
       end
       new_clock.should equal(old_clock)
+
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+      slave_should_report_clock([0,0])
+      @slave_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
+      @master_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
+      start_clock = zero
+      inner_clock = zero
+      outer_clock = ActiveRecord::Base.with_consistency(start_clock) do
+        ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+        inner_clock = ActiveRecord::Base.with_consistency(master_position(1)) do
+          ActiveRecord::Base.connection.send('select_all', 'testing') # master
+        end
+        ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+      end
+      start_clock.should equal(outer_clock)
+      inner_clock.should > start_clock
     end
 
     it "should do the right thing when nested inside with_master" do

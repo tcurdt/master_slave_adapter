@@ -310,9 +310,9 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     end
 
-    it "should work in simple cascades" do
+    it "should do the right thing when nested inside with_consistency" do
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
-      slave_should_report_clock([ 0, 0, 0 ])
+      slave_should_report_clock([ 0, 0 ])
       @slave_connection.should_receive('select_one').exactly(3).times.with('testing').and_return(true)
       old_clock = zero
       new_clock = ActiveRecord::Base.with_consistency(old_clock) do
@@ -325,39 +325,59 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       new_clock.should equal(old_clock)
     end
 
-    it "should pass on the master connection and clock in the cascades" do
+    it "should do the right thing when nested inside with_master" do
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
-      slave_should_report_clock([ 0, 0, 0 ])
-      master_should_report_clock(1)
+      slave_should_report_clock(0)
       @slave_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
-      @master_connection.should_receive('update').once.with('testing').and_return(true)
       @master_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
-      old_clock = zero
-      new_clock = ActiveRecord::Base.with_consistency(old_clock) do
-        Thread.current[:master_slave_select_connection].should == nil
-        ActiveRecord::Base.connection.send('select_all', 'testing')
-        Thread.current[:master_slave_clock].should equal(old_clock)
-        Thread.current[:master_slave_select_connection].should == :slave
-
-        ActiveRecord::Base.connection.send('update', 'testing')
-        Thread.current[:master_slave_clock].should > old_clock
-        Thread.current[:master_slave_select_connection].should == :master
-
-        ActiveRecord::Base.with_consistency(old_clock) do
-          Thread.current[:master_slave_select_connection].should == nil
-          Thread.current[:master_slave_clock].should > old_clock
-          ActiveRecord::Base.connection.send('select_all', 'testing')
-          Thread.current[:master_slave_select_connection].should == :master
-          Thread.current[:master_slave_clock].should > old_clock
+      ActiveRecord::Base.with_master do
+        ActiveRecord::Base.connection.send('select_all', 'testing') # master
+        ActiveRecord::Base.with_consistency(nil) do
+          ActiveRecord::Base.connection.send('select_all', 'testing') # slave
         end
-              
-        Thread.current[:master_slave_select_connection].should == nil
-        Thread.current[:master_slave_clock].should > old_clock
-        ActiveRecord::Base.connection.send('select_one', 'testing')
-        Thread.current[:master_slave_select_connection].should == :master
+        ActiveRecord::Base.connection.send('select_all', 'testing') # master
       end
-      Thread.current[:master_slave_select_connection].should == nil
-      new_clock.should > old_clock
+    end
+
+    it "should do the right thing when nested inside with_slave" do
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+      slave_should_report_clock(0)
+      @slave_connection.should_receive('select_all').exactly(3).times.with('testing').and_return(true)
+      ActiveRecord::Base.with_slave do
+        ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+        ActiveRecord::Base.with_consistency(nil) do
+          ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+        end
+        ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+      end
+    end
+
+    it "should do the right thing when wrapping with_master" do
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+      slave_should_report_clock(0)
+      @slave_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
+      @master_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
+      ActiveRecord::Base.with_consistency(nil) do
+        ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+        ActiveRecord::Base.with_master do
+          ActiveRecord::Base.connection.send('select_all', 'testing') # master
+        end
+        ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+      end
+    end
+
+    it "should do the right thing when wrapping with_slave" do
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+      slave_should_report_clock(0)
+      @slave_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
+      @master_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
+      ActiveRecord::Base.with_consistency(master_position(1)) do
+        ActiveRecord::Base.connection.send('select_all', 'testing') # master
+        ActiveRecord::Base.with_slave do
+          ActiveRecord::Base.connection.send('select_all', 'testing') # slave
+        end
+        ActiveRecord::Base.connection.send('select_all', 'testing') # master
+      end
     end
 
   end

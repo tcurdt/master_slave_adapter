@@ -120,30 +120,30 @@ module ActiveRecord
       class << self
 
         def with_master
-          Thread.current[:master_slave_select_connection] = :master
+          Thread.current[:master_slave_select_connection] = [ :master ] + (Thread.current[:master_slave_select_connection]||[])
           result = yield
-          Thread.current[:master_slave_select_connection] = nil
+          Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
           result
         end
 
         def with_slave
-          Thread.current[:master_slave_select_connection] = :slave
+          Thread.current[:master_slave_select_connection] = [ :slave ] + (Thread.current[:master_slave_select_connection]||[])
           result = yield
-          Thread.current[:master_slave_select_connection] = nil
+          Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
           result
         end
 
 
         def with_consistency(clock)
-          # clock is only motonic increasing
-          Thread.current[:master_slave_clock] = [ Thread.current[:master_slave_clock] || Clock::zero, clock || Clock::zero ].max
-          # explicitly ask for an evaluation to pick a connection
-          Thread.current[:master_slave_select_connection] = nil
+          Thread.current[:master_slave_select_connection] = [ nil ] + (Thread.current[:master_slave_select_connection]||[])
+          Thread.current[:master_slave_clock] = [ clock || Clock::zero ] + (Thread.current[:master_slave_clock]||[])
+
           yield
-          # clear selection
-          Thread.current[:master_slave_select_connection] = nil
-          # return the latest clock, might or might not have been changed
-          Thread.current[:master_slave_clock]
+          result = Thread.current[:master_slave_clock][0]
+
+          Thread.current[:master_slave_clock] = Thread.current[:master_slave_clock].drop(1)
+          Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
+          result
         end
 
         def reset!
@@ -164,11 +164,11 @@ module ActiveRecord
       private
 
       def update_clock
-        # update the clock (if there is one)
-        Thread.current[:master_slave_clock] = master_clock || Thread.current[:master_slave_clock]
+        # update the clock, if there was problem keep using the old one
+        Thread.current[:master_slave_clock][0] = master_clock || Thread.current[:master_slave_clock][0]
         # it's a write so from now on we use the master connection
         # as replication is not likely to be that fast
-        Thread.current[:master_slave_select_connection] = :master
+        Thread.current[:master_slave_select_connection][0] = :master
       end
 
       def on_write
@@ -204,14 +204,17 @@ module ActiveRecord
       end
 
       def select_connection
+        connection_stack = Thread.current[:master_slave_select_connection] ||= []
+        clock_stack = Thread.current[:master_slave_clock] ||= []
+
         # pick the right connection
         if MasterSlaveAdapter.master_forced? || @master_connection.open_transactions > 0
-          Thread.current[:master_slave_select_connection] = :master
+          connection_stack[0] = :master
         end
-        Thread.current[:master_slave_select_connection] ||= connection_for_clock(Thread.current[:master_slave_clock])
+        connection_stack[0] ||= connection_for_clock(clock_stack[0])
 
         # return the current connection
-        if Thread.current[:master_slave_select_connection] == :slave
+        if connection_stack[0] == :slave
           slave_connection
         else
           master_connection

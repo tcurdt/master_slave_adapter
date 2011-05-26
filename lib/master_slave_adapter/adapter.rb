@@ -121,14 +121,16 @@ module ActiveRecord
 
         def with_master
           Thread.current[:master_slave_select_connection] = :master
-          yield
+          result = yield
           Thread.current[:master_slave_select_connection] = nil
+          result
         end
 
         def with_slave
           Thread.current[:master_slave_select_connection] = :slave
-          yield
+          result = yield
           Thread.current[:master_slave_select_connection] = nil
+          result
         end
 
 

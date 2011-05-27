@@ -254,12 +254,19 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     end
 
     ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
+      it "should raise an exception if consistency is nil" do
+        ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+        lambda do
+          ActiveRecord::Base.with_consistency(nil) do
+          end
+        end.should raise_error(ArgumentError)
+      end
 
-      it "should send the method '#{method}' to the slave if no clock is given" do
+      it "should send the method '#{method}' to the slave if clock.zero is given" do
         ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
         slave_should_report_clock(0)
         @slave_connection.should_receive(method).with('testing').and_return(true)
-        old_clock = nil
+        old_clock = zero
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           ActiveRecord::Base.connection.send(method, 'testing')
         end
@@ -348,7 +355,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       @master_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
       ActiveRecord::Base.with_master do
         ActiveRecord::Base.connection.send('select_all', 'testing') # master
-        ActiveRecord::Base.with_consistency(nil) do
+        ActiveRecord::Base.with_consistency(zero) do
           ActiveRecord::Base.connection.send('select_all', 'testing') # slave
         end
         ActiveRecord::Base.connection.send('select_all', 'testing') # master
@@ -361,7 +368,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       @slave_connection.should_receive('select_all').exactly(3).times.with('testing').and_return(true)
       ActiveRecord::Base.with_slave do
         ActiveRecord::Base.connection.send('select_all', 'testing') # slave
-        ActiveRecord::Base.with_consistency(nil) do
+        ActiveRecord::Base.with_consistency(zero) do
           ActiveRecord::Base.connection.send('select_all', 'testing') # slave
         end
         ActiveRecord::Base.connection.send('select_all', 'testing') # slave
@@ -373,7 +380,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       slave_should_report_clock(0)
       @slave_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
       @master_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
-      ActiveRecord::Base.with_consistency(nil) do
+      ActiveRecord::Base.with_consistency(zero) do
         ActiveRecord::Base.connection.send('select_all', 'testing') # slave
         ActiveRecord::Base.with_master do
           ActiveRecord::Base.connection.send('select_all', 'testing') # master

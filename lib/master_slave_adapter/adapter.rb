@@ -135,6 +135,8 @@ module ActiveRecord
 
 
         def with_consistency(clock)
+          raise ArgumentError, "consistency cannot be nil" if !clock
+
           Thread.current[:master_slave_select_connection] = [ nil ] + (Thread.current[:master_slave_select_connection]||[])
           Thread.current[:master_slave_clock] = [ clock || Clock::zero ] + (Thread.current[:master_slave_clock]||[])
 
@@ -143,10 +145,6 @@ module ActiveRecord
 
           Thread.current[:master_slave_clock] = Thread.current[:master_slave_clock].drop(1)
           Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
-          # # pass clock to upper block
-          # if Thread.current[:master_slave_clock].length > 0
-          #   Thread.current[:master_slave_clock][0] = [ Thread.current[:master_slave_clock][0], result ].max
-          # end
           result
         end
 

@@ -51,8 +51,8 @@ module ActiveRecord
         common_config[:adapter] = config[:master_slave_adapter]
 
         self.master_config = common_config.merge(config[:master]||{})
-        self.slave_configs = config[:slaves].values.map do |slave_config|
-          common_config.merge(slave_config)
+        self.slave_configs = config[:slaves].inject([]) do |memo, (slave_id,slave_config)|
+          memo << common_config.merge(slave_config).merge({ :id => slave_id })
         end
 
         self.disable_connection_test = config[:disable_connection_test] == 'true'

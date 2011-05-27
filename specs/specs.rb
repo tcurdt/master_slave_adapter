@@ -270,8 +270,8 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           ActiveRecord::Base.connection.send(method, 'testing')
         end
-        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
-        new_clock.should equal(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero)
+        new_clock.should be_a(zero.class)
+        new_clock.should equal(zero)
       end
 
       it "should send the method '#{method}' to the master if slave hasn't cought up to required clock yet" do
@@ -282,7 +282,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           ActiveRecord::Base.connection.send(method, 'testing' )
         end
-        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
+        new_clock.should be_a(zero.class)
         new_clock.should equal(old_clock)
       end
 
@@ -294,8 +294,8 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           ActiveRecord::Base.connection.send(method, 'testing')
         end
-        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
-        new_clock.should equal(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero)
+        new_clock.should be_a(zero.class)
+        new_clock.should equal(zero)
       end
 
       it "should send the method '#{method}' to the master after a write operation" do
@@ -311,7 +311,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
           ActiveRecord::Base.connection.send('update', 'testing')
           ActiveRecord::Base.connection.send(method, 'testing')
         end
-        new_clock.should be_a(ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock)
+        new_clock.should be_a(zero.class)
         new_clock.should > old_clock
       end
 

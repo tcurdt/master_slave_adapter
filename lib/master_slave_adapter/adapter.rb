@@ -186,11 +186,9 @@ module ActiveRecord
           # check the slave for it's replication state
           if clock = slave_clock
             if clock >= required_clock
-              puts "TC: using slave, it is up to speed #{required_clock} >= #{clock}"
               # slave is safe to use
               :slave
             else
-              puts "TC: using master, slave is behind #{required_clock} < #{clock}"
               # slave is not there yet
               :master
             end

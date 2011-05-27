@@ -251,7 +251,7 @@ module ActiveRecord
 
       def slave_clock(i)
         if status = connect_to_slave(i).select_one("SHOW SLAVE STATUS")
-          Clock.new(status['Master_Log_File'], status['Read_Master_Log_Pos'])
+          Clock.new(status['Master_Log_File'], status['Exec_Master_Log_Pos'])
         end
       end
 

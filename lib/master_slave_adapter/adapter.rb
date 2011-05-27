@@ -30,25 +30,39 @@ module ActiveRecord
 
       attr_accessor :connections
       attr_accessor :master_config
-      attr_accessor :slave_config
+      attr_accessor :slave_configs
       attr_accessor :disable_connection_test
 
 
       delegate :select_all, :select_one, :select_rows, :select_value, :select_values, :to => :select_connection
 
-      def initialize( config )
+      def initialize(config)
         if config[:master].blank?
           raise "There is no :master config in the database configuration provided -> #{config.inspect} "
         end
-        self.slave_config = config.symbolize_keys
-        self.master_config = self.slave_config.delete(:master).symbolize_keys
-        self.slave_config[:adapter] = self.slave_config.delete(:master_slave_adapter)
-        self.master_config[:adapter] ||= self.slave_config[:adapter]
-        self.disable_connection_test = self.slave_config.delete( :disable_connection_test ) == 'true'
+
+        @slave_connections = []
+
+        config = config.symbolize_keys
+
+        common_config = config.reject do |k|
+          [ :master, :slaves, :eager_load_connections, :disable_connection_test, :master_slave_adapter ].include? k
+        end
+        common_config[:adapter] = config[:master_slave_adapter]
+
+        self.master_config = common_config.merge(config[:master]||{})
+        self.slave_configs = config[:slaves].values.map do |slave_config|
+          common_config.merge(slave_config)
+        end
+
+        self.disable_connection_test = config[:disable_connection_test] == 'true'
+
         self.connections = []
-        if self.slave_config.delete( :eager_load_connections ) == 'true'
+        if config[:eager_load_connections] == 'true'
           connect_to_master
-          connect_to_slave
+          for i in 0...self.slave_configs.length
+            connect_to_slave(i)
+          end
         end
       end
 
@@ -98,12 +112,12 @@ module ActiveRecord
         connect_to_master
       end
 
-      def slave_connection
-        connect_to_slave
+      def slave_connection(i)
+        connect_to_slave(i)
       end
 
       def connections
-        [ @master_connection, @slave_connection ].compact
+        ([ @master_connection ] + @slave_connections).compact
       end
 
       def test_connections
@@ -181,10 +195,10 @@ module ActiveRecord
         result
       end
 
-      def connection_for_clock(required_clock)
+      def connection_for_clock(required_clock, i)
         if required_clock
           # check the slave for it's replication state
-          if clock = slave_clock
+          if clock = slave_clock(i)
             if clock >= required_clock
               # slave is safe to use
               :slave
@@ -203,6 +217,11 @@ module ActiveRecord
         end
       end
 
+      def pick_slave(slaves)
+        slaves_count = slaves.length
+        slaves_count > 1 ? rand(slaves.length) : 0
+      end
+
       def select_connection
         connection_stack = Thread.current[:master_slave_select_connection] ||= []
         clock_stack = Thread.current[:master_slave_clock] ||= []
@@ -211,11 +230,14 @@ module ActiveRecord
         if MasterSlaveAdapter.master_forced? || @master_connection.open_transactions > 0
           connection_stack[0] = :master
         end
-        connection_stack[0] ||= connection_for_clock(clock_stack[0])
+
+        i = pick_slave(self.slave_configs)
+
+        connection_stack[0] ||= connection_for_clock(clock_stack[0], i)
 
         # return the current connection
         if connection_stack[0] == :slave
-          slave_connection
+          slave_connection(i)
         else
           master_connection
         end
@@ -227,18 +249,18 @@ module ActiveRecord
         end
       end
 
-      def slave_clock
-        if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
+      def slave_clock(i)
+        if status = connect_to_slave(i).select_one("SHOW SLAVE STATUS")
           Clock.new(status['Master_Log_File'], status['Read_Master_Log_Pos'])
         end
       end
 
       def connect_to_master
-        @master_connection ||= ActiveRecord::Base.send( "#{self.master_config[:adapter]}_connection", self.master_config )
+        @master_connection ||= ActiveRecord::Base.send("#{self.master_config[:adapter]}_connection", self.master_config)
       end
 
-      def connect_to_slave
-        @slave_connection ||= ActiveRecord::Base.send( "#{self.slave_config[:adapter]}_connection", self.slave_config)
+      def connect_to_slave(i)
+        @slave_connections[i] ||= ActiveRecord::Base.send("#{self.slave_configs[i][:adapter]}_connection", self.slave_configs[i])
       end
 
     end

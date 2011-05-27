@@ -50,15 +50,16 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
   describe 'with common configuration' do
 
-
     before do
 
       @database_setup = {
+        :master_slave_adapter => 'test',
         :adapter => 'master_slave',
         :username => 'root',
-        :database => 'slave',
-        :master_slave_adapter => 'test',
-        :master => { :username => 'root', :database => 'master' }
+        :master => { :database => 'master' },
+        :slaves => {
+           :slave01 => { :database => 'slave' }
+        }
       }
 
       ActiveRecord::Base.establish_connection( @database_setup )
@@ -137,7 +138,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     it 'should have a slave connection' do
       @master_connection.stub!( :open_transactions ).and_return( 0 )
-      ActiveRecord::Base.connection.slave_connection.should == @slave_connection
+      ActiveRecord::Base.connection.slave_connection(0).should == @slave_connection
     end
 
   end
@@ -146,12 +147,14 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     before do
       @database_setup = {
-        :adapter => 'master_slave',
-        :username => 'root',
-        :database => 'slave',
-        :disable_connection_test => 'true',
         :master_slave_adapter => 'test',
-        :master => { :username => 'root', :database => 'master' }
+        :adapter => 'master_slave',
+        :disable_connection_test => 'true',
+        :username => 'root',
+        :master => { :database => 'master' },
+        :slaves => {
+          :slave01 => { :database => 'slave' }
+        }
       }
 
       ActiveRecord::Base.establish_connection( @database_setup )
@@ -184,12 +187,14 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     before do
       @database_setup = {
-        :adapter => 'master_slave',
-        :username => 'root',
-        :database => 'slave',
-        :eager_load_connections => 'true',
         :master_slave_adapter => 'test',
-        :master => { :username => 'root', :database => 'master' }
+        :adapter => 'master_slave',
+        :eager_load_connections => 'true',
+        :username => 'root',
+        :master => { :database => 'master' },
+        :slaves => {
+          :slave01 => { :database => 'slave' }
+        }
       }
 
       ActiveRecord::Base.establish_connection( @database_setup )
@@ -205,7 +210,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     end
 
     it 'should load the slave connection before any method call' do
-      ActiveRecord::Base.connection.instance_variable_get(:@slave_connection).should == @slave_connection
+      ActiveRecord::Base.connection.instance_variable_get(:@slave_connections).should == [ @slave_connection ]
     end
 
   end
@@ -214,11 +219,13 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     before do
 
       @database_setup = {
+        :master_slave_adapter => 'test',
         :adapter => 'master_slave',
         :username => 'root',
-        :database => 'slave',
-        :master_slave_adapter => 'test',
-        :master => { :username => 'root', :database => 'master' }
+        :master => { :database => 'master' },
+        :slaves => {
+          :slave01 => { :database => 'slave' }
+        }
       }
 
       ActiveRecord::Base.establish_connection( @database_setup )

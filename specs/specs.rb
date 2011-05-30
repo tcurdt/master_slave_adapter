@@ -411,26 +411,4 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     end
 
   end
-
-  describe 'with multi slave' do
-    before do
-
-      @database_setup = {
-        :master_slave_adapter => 'test',
-        :adapter => 'master_slave',
-        :username => 'root',
-        :master => { :database => 'master' },
-        :slaves => {
-          :slave01 => { :database => 'slave1' },
-          :slave02 => { :database => 'slave2' }
-        }
-      }
-
-      ActiveRecord::Base.establish_connection(@database_setup)
-    end
-
-    it "should switch between slaves" do
-    end
-  end
-
 end

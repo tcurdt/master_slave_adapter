@@ -1,4 +1,4 @@
-master_slave_adapter - maurício DOT linhares AT gmail DOT com
+master_slave_adapter
 ====
 
 This simple plugin acts as a common ActiveRecord adapter and allows you to
@@ -21,7 +21,7 @@ end
 
 To use this adapter you just have to install the plugin:
 
-ruby script/plugin install git://github.com/mauricio/master_slave_adapter.git
+ruby script/plugin install git://github.com/tcurdt/master_slave_adapter_mauricio.git
 
 And then configure it at your database.yml file:
 

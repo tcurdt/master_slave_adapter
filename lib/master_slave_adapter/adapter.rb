@@ -165,7 +165,8 @@ module ActiveRecord
           if Thread.current[:master_slave_select_connection]
             Thread.current[:master_slave_select_connection][0] == :master
           else
-            nil
+            # there is no wrapper so selects go to slave by default
+            false
           end
         end
 
@@ -237,7 +238,7 @@ module ActiveRecord
 
       def slave_clock
         if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
-          Clock.new(status['Master_Log_File'], status['Exec_Master_Log_Pos'])
+          Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
         end
       end
 

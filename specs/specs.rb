@@ -241,7 +241,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       if pos.instance_of? Fixnum
         pos = [ pos ]
       end
-      values = pos.map { |p| { 'Master_Log_File' => '', 'Exec_Master_Log_Pos' => p } }
+      values = pos.map { |p| { 'Relay_Master_Log_File' => '', 'Exec_Master_Log_Pos' => p } }
       @slave_connection.should_receive('select_one').exactly(pos.length).with('SHOW SLAVE STATUS').and_return(*values)
     end
 

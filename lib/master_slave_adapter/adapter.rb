@@ -8,6 +8,7 @@ module ActiveRecord
         include Comparable
         attr_reader :file, :position
         def initialize(file, position)
+          raise ArgumentError, "file and postion may not be nil" if file.nil? || position.nil?
           @file, @position = file, position.to_i
         end
         def <=>(other)

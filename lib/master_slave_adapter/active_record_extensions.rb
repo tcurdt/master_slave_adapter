@@ -10,37 +10,35 @@ ActiveRecord::Base.class_eval do
 
   class << self
 
-    #
     # Call this method to force a block of code to use the master connection
-    # instead of the slave:
     #
     # ActiveRecord::Base.with_master do
     #   User.count( :conditions => { :login => 'testuser' } )
     # end
-    #
-    #
     def with_master
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_master do
         yield
       end
     end
 
+    # Call this method to force a block of code to use the slave connection
     #
-    # Call this method to force a certain binlog position.
-    # Going to the slave if it's already at the position otherwise
-    # or falling back to master.
-    #
-    # consistency = ActiveRecord::Base.with_consistency(consistency) do
+    # ActiveRecord::Base.with_slave do
     #   User.count( :conditions => { :login => 'testuser' } )
     # end
-    #
-    #
     def with_slave
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_slave do
         yield
       end
     end
 
+    # Call this method to force a certain binlog position.
+    # Going to the slave if it's already at the position otherwise
+    # falling back to master.
+    #
+    # consistency = ActiveRecord::Base.with_consistency(consistency) do
+    #   User.count( :conditions => { :login => 'testuser' } )
+    # end
     def with_consistency(consistency)
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_consistency(consistency) do
         yield

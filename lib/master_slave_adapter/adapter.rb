@@ -161,6 +161,14 @@ module ActiveRecord
           Thread.current[:master_slave_enabled] = state ? true : nil
         end
 
+        def using_master?
+          if Thread.current[:master_slave_select_connection]
+            Thread.current[:master_slave_select_connection][0] == :master
+          else
+            nil
+          end
+        end
+
       end
 
       private
@@ -229,7 +237,7 @@ module ActiveRecord
 
       def slave_clock
         if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
-          Clock.new(status['Master_Log_File'], status['Read_Master_Log_Pos'])
+          Clock.new(status['Master_Log_File'], status['Exec_Master_Log_Pos'])
         end
       end
 

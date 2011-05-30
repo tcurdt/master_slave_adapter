@@ -4,7 +4,7 @@ require "master_slave_adapter/version"
 
 Gem::Specification.new do |s|
   s.name        = 'master_slave_adapter_tcurdt'
-  s.version     = Mygem::VERSION
+  s.version     = MasterSlaveAdapter::VERSION
   s.platform    = Gem::Platform::RUBY
   s.authors     = [ 'Mauricio Linhares', 'Torsten Curdt' ]
   s.email       = 'tcurdt at vafer.org'

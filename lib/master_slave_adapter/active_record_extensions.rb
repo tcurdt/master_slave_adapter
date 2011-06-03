@@ -77,6 +77,14 @@ ActiveRecord::Base.class_eval do
 
     alias_method_chain :columns, :master
 
+    def transaction_with_master
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.transaction do
+        transaction_without_master
+      end
+    end
+
+    alias_method_chain :transaction, :master
+
   end
 
 end

@@ -60,6 +60,7 @@ module ActiveRecord
       end
 
       def update(sql, *args)
+        # puts "SQL: master.update"
         on_write do
           self.master_connection.update(sql, *args)
         end
@@ -72,6 +73,7 @@ module ActiveRecord
       end
 
       def commit_db_transaction()
+        # puts "EOT"
         on_write do
           self.master_connection.commit_db_transaction()
         end
@@ -92,6 +94,7 @@ module ActiveRecord
       end
 
       def method_missing( name, *args, &block )
+        # puts "SQL: master.#{name}"
         self.master_connection.send( name.to_sym, *args, &block )
       end
 
@@ -171,6 +174,13 @@ module ActiveRecord
           end
         end
 
+        def transaction
+          # puts "TR START"
+          yield
+          # puts "TR STOP"
+        end
+
+
       end
 
       private
@@ -225,20 +235,24 @@ module ActiveRecord
 
         # return the current connection
         if connection_stack[0] == :slave
+          # puts "SQL: slave.select"
           slave_connection
         else
+          # puts "SQL: master.select"
           master_connection
         end
       end
 
       def master_clock
-        if status = connect_to_master.select_one("SHOW MASTER STATUS")
+        connection = connect_to_master
+        if status = connection.uncached { connection.select_one("SHOW MASTER STATUS") }
           Clock.new(status['File'], status['Position'])
         end
       end
 
       def slave_clock
-        if status = connect_to_slave.select_one("SHOW SLAVE STATUS")
+        connection = connect_to_master
+        if status = connection.uncached { connection.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
         end
       end

@@ -251,7 +251,7 @@ module ActiveRecord
       end
 
       def slave_clock
-        connection = connect_to_master
+        connection = connect_to_slave
         if status = connection.uncached { connection.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
         end

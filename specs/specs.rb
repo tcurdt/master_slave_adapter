@@ -44,6 +44,9 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     @master_connection.stub!(:uncached) do |block|
       block.call
+    end
+    @slave_connection.stub!(:uncached) do |block|
+      block.call
     end 
 
   end

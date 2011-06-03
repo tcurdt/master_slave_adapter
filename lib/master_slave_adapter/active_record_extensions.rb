@@ -15,9 +15,11 @@ ActiveRecord::Base.class_eval do
     # ActiveRecord::Base.with_master do
     #   User.count( :conditions => { :login => 'testuser' } )
     # end
-    def with_master
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_master do
-        yield
+    def with_master(&block)
+      if connection.respond_to? :with_master
+        connection.with_master(&block)
+      else
+        raise "no with_master"
       end
     end
 
@@ -26,9 +28,11 @@ ActiveRecord::Base.class_eval do
     # ActiveRecord::Base.with_slave do
     #   User.count( :conditions => { :login => 'testuser' } )
     # end
-    def with_slave
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_slave do
-        yield
+    def with_slave(&block)
+      if connection.respond_to? :with_slave
+        connection.with_slave(&block)
+      else
+        raise "no with_slave"
       end
     end
 
@@ -39,11 +43,25 @@ ActiveRecord::Base.class_eval do
     # consistency = ActiveRecord::Base.with_consistency(consistency) do
     #   User.count( :conditions => { :login => 'testuser' } )
     # end
-    def with_consistency(consistency)
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.with_consistency(consistency) do
-        yield
+    def with_consistency(clock, &block)
+      if connection.respond_to? :with_consistency
+        connection.with_consistency(clock, &block)
+      else
+        raise "no with_consistency"
       end
     end
+
+    def transaction_with_master(*args, &block)
+      if connection.respond_to? :transaction
+        connection.transaction do
+          transaction_without_master(*args, &block)
+        end
+      else
+        transaction_without_master(*args, &block)
+      end
+    end
+    alias_method_chain :transaction, :master
+
 
     def master_slave_connection( config )
       config = config.symbolize_keys
@@ -66,7 +84,7 @@ ActiveRecord::Base.class_eval do
 
       end
 
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.new( config )
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.new(config)
     end
 
     def columns_with_master
@@ -74,17 +92,7 @@ ActiveRecord::Base.class_eval do
         columns_without_master
       end
     end
-
     alias_method_chain :columns, :master
 
-    def transaction_with_master
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.transaction do
-        transaction_without_master
-      end
-    end
-
-    alias_method_chain :transaction, :master
-
   end
-
 end

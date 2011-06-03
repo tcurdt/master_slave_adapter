@@ -1,7 +1,5 @@
 module ActiveRecord
-
   module ConnectionAdapters
-
     class MasterSlaveAdapter
 
       class Clock
@@ -20,7 +18,7 @@ module ActiveRecord
         def self.zero
           @zero ||= Clock.new('', 0)
         end
-     end
+      end
 
       SELECT_METHODS = [ :select_all, :select_one, :select_rows, :select_value, :select_values ]
 
@@ -60,7 +58,6 @@ module ActiveRecord
       end
 
       def update(sql, *args)
-        # puts "SQL: master.update"
         on_write do
           self.master_connection.update(sql, *args)
         end
@@ -72,13 +69,6 @@ module ActiveRecord
         end
       end
 
-      def commit_db_transaction()
-        # puts "EOT"
-        on_write do
-          self.master_connection.commit_db_transaction()
-        end
-      end
-  
       def reconnect!
         @active = true
         self.connections.each { |c| c.reconnect! }
@@ -94,7 +84,6 @@ module ActiveRecord
       end
 
       def method_missing( name, *args, &block )
-        # puts "SQL: master.#{name}"
         self.master_connection.send( name.to_sym, *args, &block )
       end
 
@@ -104,6 +93,22 @@ module ActiveRecord
 
       def slave_connection
         connect_to_slave
+      end
+
+      def current_connection=(stack)
+        Thread.current[:master_slave_connection] = stack
+      end
+
+      def current_connection
+        Thread.current[:master_slave_connection] || []
+      end
+
+      def current_clock=(stack)
+        Thread.current[:master_slave_clock] = stack
+      end
+
+      def current_clock
+        Thread.current[:master_slave_clock] || []
       end
 
       def connections
@@ -121,39 +126,42 @@ module ActiveRecord
         end
       end
 
+      def with_master
+        self.current_connection = [ :master ] + self.current_connection
+        result = yield
+        self.current_connection = self.current_connection.drop(1)
+        result
+      end
+
+      def with_slave
+        self.current_connection = [ :slave ] + self.current_connection
+        result = yield
+        self.current_connection = self.current_connection.drop(1)
+        result
+      end
+
+      def with_consistency(clock)
+        raise ArgumentError, "consistency cannot be nil" if clock.nil?
+        self.current_connection = [ nil ] + self.current_connection
+        self.current_clock = [ clock ] + self.current_clock
+        yield
+        result = current_clock[0]
+        self.current_clock = self.current_clock.drop(1)
+        self.current_connection = self.current_connection.drop(1)
+        result
+      end
+
+      def transaction(*args)
+        puts "<transaction"
+        yield
+        puts "</transaction"
+        update_clock
+      end
+
       class << self
 
-        def with_master
-          Thread.current[:master_slave_select_connection] = [ :master ] + (Thread.current[:master_slave_select_connection]||[])
-          result = yield
-          Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
-          result
-        end
-
-        def with_slave
-          Thread.current[:master_slave_select_connection] = [ :slave ] + (Thread.current[:master_slave_select_connection]||[])
-          result = yield
-          Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
-          result
-        end
-
-
-        def with_consistency(clock)
-          raise ArgumentError, "consistency cannot be nil" if !clock
-
-          Thread.current[:master_slave_select_connection] = [ nil ] + (Thread.current[:master_slave_select_connection]||[])
-          Thread.current[:master_slave_clock] = [ clock || Clock::zero ] + (Thread.current[:master_slave_clock]||[])
-
-          yield
-          result = Thread.current[:master_slave_clock][0]
-
-          Thread.current[:master_slave_clock] = Thread.current[:master_slave_clock].drop(1)
-          Thread.current[:master_slave_select_connection] = Thread.current[:master_slave_select_connection].drop(1)
-          result
-        end
-
         def reset!
-          Thread.current[:master_slave_select_connection] = nil
+          Thread.current[:master_slave_connection] = nil
           Thread.current[:master_slave_clock] = nil
         end
 
@@ -166,31 +174,25 @@ module ActiveRecord
         end
 
         def using_master?
-          if Thread.current[:master_slave_select_connection]
-            Thread.current[:master_slave_select_connection][0] == :master
+          if Thread.current[:master_slave_connection]
+            Thread.current[:master_slave_connection][0] == :master
           else
             # there is no wrapper so selects go to slave by default
             false
           end
         end
 
-        def transaction
-          # puts "TR START"
-          yield
-          # puts "TR STOP"
-        end
-
-
       end
 
       private
 
       def update_clock
+        puts " update clock"
         # update the clock, if there was problem keep using the old one
-        Thread.current[:master_slave_clock][0] = master_clock || Thread.current[:master_slave_clock][0]
+        self.current_clock[0] = master_clock || self.current_clock[0]
         # it's a write so from now on we use the master connection
         # as replication is not likely to be that fast
-        Thread.current[:master_slave_select_connection][0] = :master
+        self.current_connection[0] = :master
       end
 
       def on_write
@@ -224,26 +226,26 @@ module ActiveRecord
       end
 
       def select_connection
-        connection_stack = Thread.current[:master_slave_select_connection] ||= []
-        clock_stack = Thread.current[:master_slave_clock] ||= []
+        connection_stack = self.current_connection
+        clock_stack = self.current_clock
 
         # pick the right connection
         if MasterSlaveAdapter.master_forced? || @master_connection.open_transactions > 0
           connection_stack[0] = :master
         end
+
         connection_stack[0] ||= connection_for_clock(clock_stack[0])
 
         # return the current connection
         if connection_stack[0] == :slave
-          # puts "SQL: slave.select"
           slave_connection
         else
-          # puts "SQL: master.select"
           master_connection
         end
       end
 
       def master_clock
+        puts " master clock"
         connection = connect_to_master
         if status = connection.uncached { connection.select_one("SHOW MASTER STATUS") }
           Clock.new(status['File'], status['Position'])
@@ -251,6 +253,7 @@ module ActiveRecord
       end
 
       def slave_clock
+        puts " slave clock"
         connection = connect_to_slave
         if status = connection.uncached { connection.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
@@ -266,7 +269,5 @@ module ActiveRecord
       end
 
     end
-
   end
-
 end

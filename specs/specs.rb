@@ -57,7 +57,6 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
   describe 'with common configuration' do
 
-
     before do
 
       @database_setup = {
@@ -327,32 +326,37 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     it "should update the clock after a transaction" do
       ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
       slave_should_report_clock(0)
-      master_should_report_clock([0, 1])
+      master_should_report_clock([0, 1, 1, 1, 1])
       @slave_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
-      @master_connection.should_receive('update').exactly(2).times.with('testing').and_return(true)
-      @master_connection.should_receive('transaction').and_return(true)
-      @master_connection.should_receive('select_all').exactly(3).times.with('testing').and_return(true)
-
-      puts "---["
+      @master_connection.should_receive('update').exactly(3).times.with('testing').and_return(true)
+      # @master_connection.should_receive('transaction').and_return(true)
+      @master_connection.should_receive('select_all').exactly(5).times.with('testing').and_return(true)
 
       old_clock = zero
       new_clock = ActiveRecord::Base.with_consistency(old_clock) do
+        puts "slave: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # slave  s=0 m=0
+        puts "master: update"
         ActiveRecord::Base.connection.send('update', 'testing')     # master s=0 m=1
+        puts "master: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=1
 
         ActiveRecord::Base.transaction do
+          puts "master: select"
           ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=1
+          puts "master: update"
           ActiveRecord::Base.connection.send('update', 'testing')     # master s=0 m=1
+          puts "master: select"
           ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=1
         end
 
+        puts "master: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=2
+        puts "master: update"
         ActiveRecord::Base.connection.send('update', 'testing')     # master s=0 m=3
+        puts "master: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=3
       end
-
-      puts "]---"
     end
 
     it "should do the right thing when nested inside with_consistency" do

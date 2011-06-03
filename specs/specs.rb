@@ -42,6 +42,10 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     @master_connection = ActiveRecord::Base._master
     @slave_connection = ActiveRecord::Base._slave
 
+    @master_connection.stub!(:uncached) do |block|
+      block.call
+    end 
+
   end
 
   after do

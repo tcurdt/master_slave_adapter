@@ -169,8 +169,8 @@ module ActiveRecord
           ActiveRecord::Base.with_slave(&block)
         end
 
-        def with_consitency(clock, &block)
-          ActiveRecord::Base.with_slave(clock, &block)
+        def with_consistency(clock, &block)
+          ActiveRecord::Base.with_consistency(clock, &block)
         end
 
         def reset!

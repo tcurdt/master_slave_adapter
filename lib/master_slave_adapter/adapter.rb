@@ -151,12 +151,10 @@ module ActiveRecord
         result
       end
 
-      def transaction(*args)
-        # puts "<transaction"
-        result = yield
-        # puts "</transaction"
-        update_clock
-        result
+      def transaction(options = {}, &block)
+        on_write do
+          self.master_connection.transaction(options, &block)
+        end
       end
 
       class << self

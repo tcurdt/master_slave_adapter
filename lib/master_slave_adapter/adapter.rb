@@ -152,9 +152,9 @@ module ActiveRecord
       end
 
       def transaction(*args)
-        puts "<transaction"
+        # puts "<transaction"
         yield
-        puts "</transaction"
+        # puts "</transaction"
         update_clock
       end
 
@@ -187,7 +187,7 @@ module ActiveRecord
       private
 
       def update_clock
-        puts " update clock"
+        # puts " update clock"
         # update the clock, if there was problem keep using the old one
         self.current_clock[0] = master_clock || self.current_clock[0]
         # it's a write so from now on we use the master connection
@@ -245,7 +245,7 @@ module ActiveRecord
       end
 
       def master_clock
-        puts " master clock"
+        # puts " master clock"
         connection = connect_to_master
         if status = connection.uncached { connection.select_one("SHOW MASTER STATUS") }
           Clock.new(status['File'], status['Position'])
@@ -253,7 +253,7 @@ module ActiveRecord
       end
 
       def slave_clock
-        puts " slave clock"
+        # puts " slave clock"
         connection = connect_to_slave
         if status = connection.uncached { connection.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])

@@ -75,6 +75,9 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     end
 
+    it "should call 'columns' on master" do
+    end
+
     ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
 
       it "should send the method '#{method}' to the slave connection" do
@@ -334,27 +337,27 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
       old_clock = zero
       new_clock = ActiveRecord::Base.with_consistency(old_clock) do
-        puts "slave: select"
+        # puts "slave: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # slave  s=0 m=0
-        puts "master: update"
+        # puts "master: update"
         ActiveRecord::Base.connection.send('update', 'testing')     # master s=0 m=1
-        puts "master: select"
+        # puts "master: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=1
 
         ActiveRecord::Base.transaction do
-          puts "master: select"
+          # puts "master: select"
           ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=1
-          puts "master: update"
+          # puts "master: update"
           ActiveRecord::Base.connection.send('update', 'testing')     # master s=0 m=1
-          puts "master: select"
+          # puts "master: select"
           ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=1
         end
 
-        puts "master: select"
+        # puts "master: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=2
-        puts "master: update"
+        # puts "master: update"
         ActiveRecord::Base.connection.send('update', 'testing')     # master s=0 m=3
-        puts "master: select"
+        # puts "master: select"
         ActiveRecord::Base.connection.send('select_all', 'testing') # master s=0 m=3
       end
     end

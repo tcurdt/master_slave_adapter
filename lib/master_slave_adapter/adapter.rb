@@ -153,12 +153,25 @@ module ActiveRecord
 
       def transaction(*args)
         # puts "<transaction"
-        yield
+        result = yield
         # puts "</transaction"
         update_clock
+        result
       end
 
       class << self
+
+        def with_master(&block)
+          ActiveRecord::Base.with_master(&block)
+        end
+
+        def with_slave(&block)
+          ActiveRecord::Base.with_slave(&block)
+        end
+
+        def with_consitency(clock, &block)
+          ActiveRecord::Base.with_slave(clock, &block)
+        end
 
         def reset!
           Thread.current[:master_slave_connection] = nil

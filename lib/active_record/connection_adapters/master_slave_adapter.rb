@@ -1,3 +1,4 @@
+require 'active_record'
 require 'active_record/connection_adapters/abstract/database_statements'
 require 'active_record/connection_adapters/abstract/schema_statements'
 

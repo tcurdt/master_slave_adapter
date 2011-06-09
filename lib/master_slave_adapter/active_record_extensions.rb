@@ -11,7 +11,7 @@ ActiveRecord::Base.class_eval do
       if connection.respond_to? :with_master
         connection.with_master(&block)
       else
-        raise "no with_master"
+        yield
       end
     end
 
@@ -24,7 +24,7 @@ ActiveRecord::Base.class_eval do
       if connection.respond_to? :with_slave
         connection.with_slave(&block)
       else
-        raise "no with_slave"
+        yield
       end
     end
 
@@ -39,7 +39,7 @@ ActiveRecord::Base.class_eval do
       if connection.respond_to? :with_consistency
         connection.with_consistency(clock, &block)
       else
-        raise "no with_consistency"
+        yield
       end
     end
 

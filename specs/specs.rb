@@ -6,6 +6,8 @@ $LOAD_PATH << File.expand_path(File.join( File.dirname( __FILE__ ), '..', 'lib' 
 
 require 'active_record/connection_adapters/master_slave_adapter'
 
+SELECT_METHODS = [ :select_all, :select_one, :select_rows, :select_value, :select_values ]
+
 ActiveRecord::Base.instance_eval do
 
   def test_connection( config )
@@ -78,7 +80,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     it "should call 'columns' on master" do
     end
 
-    ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
+    SELECT_METHODS.each do |method|
 
       it "should send the method '#{method}' to the slave connection" do
         @master_connection.stub!( :open_transactions ).and_return( 0 )
@@ -127,7 +129,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     end
 
-    (ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods.map(&:to_sym) - ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS).each do |method|
+    (ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods.map(&:to_sym) - SELECT_METHODS).each do |method|
 
       it "should send the method '#{method}' from ActiveRecord::ConnectionAdapters::DatabaseStatements to the master"  do
         @master_connection.should_receive( method ).and_return( true )
@@ -177,7 +179,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     end
 
-    ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
+    SELECT_METHODS.each do |method|
 
       it "should not perform the testing select on the slave if #{method} is called" do
         @slave_connection.should_not_receive( :select_value ).with( "SELECT 1", "test select" )
@@ -239,11 +241,11 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     end
 
     def zero
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero
+      MasterSlaveAdapter::Connections::ConsistentConnection::Clock.zero
     end
 
     def master_position(pos)
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.new('', pos)
+      MasterSlaveAdapter::Connections::ConsistentConnection::Clock.new('', pos)
     end
 
     def slave_should_report_clock(pos)
@@ -262,7 +264,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       @master_connection.should_receive('select_one').exactly(pos.length).with('SHOW MASTER STATUS').and_return(*values)
     end
 
-    ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::SELECT_METHODS.each do |method|
+    SELECT_METHODS.each do |method|
       it "should raise an exception if consistency is nil" do
         ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
         lambda do

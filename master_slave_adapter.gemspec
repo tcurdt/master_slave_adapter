@@ -1,18 +1,15 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
-require "master_slave_adapter/version"
 
 Gem::Specification.new do |s|
-  s.name        = 'master_slave_adapter_tcurdt'
-  s.version     = MasterSlaveAdapter::VERSION
+  s.name        = 'master_slave_adapter_soundcloud'
+  s.version     = File.read('VERSION').to_s
   s.platform    = Gem::Platform::RUBY
-  s.authors     = [ 'Mauricio Linhares', 'Torsten Curdt' ]
-  s.email       = 'tcurdt at vafer.org'
-  s.homepage    = 'http://github.com/tcurdt/master_slave_adapter_mauricio'
-  s.summary     = 'Master Slave Adapter'
-  s.description = 'Acts as a ActiveRecord adapter and allows you to setup a master-slave environment.'
-
-  s.rubyforge_project = "master_slave_adapter_tcurdt"
+  s.authors     = [ 'Mauricio Linhares', 'Torsten Curdt', 'Kim Altintop', 'Omid Aladini', 'SoundCloud' ]
+  s.email       = %q{kim@soundcloud.com tcurdt@soundcloud.com omid@soundcloud.com}
+  s.homepage    = 'http://github.com/soundcloud/master_slave_adapter'
+  s.summary     = %q{Replication Aware Master/Slave Database Adapter for Rails}
+  s.description = %q{Totally Awesome}
 
   s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")

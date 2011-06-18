@@ -67,7 +67,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
   before do
     unless database_setup[:disable_connection_test] == 'true'
       [ master_connection, slave_connection ].each do |c|
-        c.should_receive(:active?).and_return(true)
+        c.should_receive(:active?).exactly(2).times.and_return(true)
       end
     end
     ActiveRecord::Base.establish_connection(database_setup)

@@ -100,6 +100,8 @@ module ActiveRecord
         end
       end
 
+      checkout :active?
+
       def initialize(config, logger)
         super(nil, logger)
 

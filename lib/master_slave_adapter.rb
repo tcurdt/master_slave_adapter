@@ -193,7 +193,7 @@ module ActiveRecord
 
       def commit_db_transaction
         on_write { |conn| conn.commit_db_transaction }
-        on_commit_callbacks.shift.call until on_commit_callbacks.blank?
+        on_commit_callbacks.shift.call(current_clock) until on_commit_callbacks.blank?
       end
 
       def rollback_db_transaction

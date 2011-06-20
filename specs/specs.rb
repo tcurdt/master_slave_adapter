@@ -2,8 +2,8 @@ require 'rubygems'
 require 'active_record'
 require 'rspec'
 
-#ActiveRecord::Base.logger =
-  #Logger.new(STDOUT).tap { |l| l.level = Logger::DEBUG }
+ActiveRecord::Base.logger =
+  Logger.new(STDOUT).tap { |l| l.level = Logger::DEBUG }
 
 $LOAD_PATH << File.expand_path(File.join( File.dirname( __FILE__ ), '..', 'lib' ))
 
@@ -432,4 +432,85 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       end
     end
   end # /with_consistency
+
+  describe "transaction callbacks" do
+    before do
+      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
+    end
+
+    def run_tx
+      adapter_connection
+        .should_receive('master_clock')
+        .and_return(Clock.new('', 1))
+      %w(begin_db_transaction
+         commit_db_transaction
+         increment_open_transactions
+         decrement_open_transactions).each do |txstmt|
+        master_connection
+          .should_receive(txstmt).exactly(1).times
+      end
+      master_connection
+        .should_receive('open_transactions').exactly(4).times
+        .and_return(0, 1, 0, 0)
+
+      master_connection
+        .should_receive('update').with('testing')
+        .and_return(true)
+
+      ActiveRecord::Base.transaction do
+        adapter_connection.send('update', 'testing')
+      end
+    end
+
+    def fail_tx
+      %w(begin_db_transaction
+         rollback_db_transaction
+         increment_open_transactions
+         decrement_open_transactions).each do |txstmt|
+        master_connection
+          .should_receive(txstmt).exactly(1).times
+      end
+      master_connection
+        .should_receive('open_transactions').exactly(3).times
+        .and_return(0, 1, 0)
+      master_connection
+        .should_receive('update').with('testing')
+        .and_return(true)
+
+      ActiveRecord::Base.transaction do
+        adapter_connection.send('update', 'testing')
+        raise "rollback"
+      end
+    rescue
+      nil
+    end
+
+    context "on commit" do
+      it "on_commit callback should be called" do
+        x = false
+        adapter_connection.on_commit { x = true }
+        lambda { run_tx }.should change { x }.to(true)
+      end
+
+      it "on_rollback callback should not be called" do
+        x = false
+        adapter_connection.on_rollback { x = true }
+        lambda { run_tx }.should_not change { x }
+      end
+    end
+
+    context "rollback" do
+      it "on_commit callback should not be called" do
+        x = false
+        adapter_connection.on_commit { x = true }
+        lambda { fail_tx }.should_not change { x }
+      end
+
+      it "on_rollback callback should be called" do
+        x = false
+        adapter_connection.on_rollback { x = true }
+        lambda { fail_tx }.should change { x }.to(true)
+      end
+    end
+  end
 end

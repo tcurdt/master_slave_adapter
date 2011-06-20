@@ -27,6 +27,14 @@ module ActiveRecord
         end
       end
 
+      def on_commit(&blk)
+        connection.on_commit(&blk) if connection.respond_to? :on_commit
+      end
+
+      def on_rollback(&blk)
+        connection.on_rollback(&blk) if connection.respond_to? :on_rollback
+      end
+
       def master_slave_connection(config)
         config = massage(config)
         load_adapter(config.fetch(:connection_adapter))
@@ -140,6 +148,14 @@ module ActiveRecord
         self.current_clock || clock
       end
 
+      def on_commit(&blk)
+        on_commit_callbacks.push blk
+      end
+
+      def on_rollback(&blk)
+        on_rollback_callbacks.push blk
+      end
+
 
       # backwards compatibility
       class << self
@@ -153,8 +169,11 @@ module ActiveRecord
           ActiveRecord::Base.with_consistency(clock, &blk)
         end
         def reset!
-          Thread.current[:master_slave_clock] =
-            Thread.current[:master_slave_connection] = nil
+          Thread.current[:master_slave_clock]      =
+          Thread.current[:master_slave_connection] =
+          Thread.current[:on_commit_callbacks]     =
+          Thread.current[:on_rollback_callbacks]   =
+          nil
         end
       end
 
@@ -174,6 +193,13 @@ module ActiveRecord
 
       def commit_db_transaction
         on_write { |conn| conn.commit_db_transaction }
+        on_commit_callbacks.shift.call until on_commit_callbacks.blank?
+      end
+
+      def rollback_db_transaction
+        on_commit_callbacks.clear
+        with(master_connection, :master) { |conn| conn.rollback_db_transaction }
+        on_rollback_callbacks.shift.call until on_rollback_callbacks.blank?
       end
 
       def active?
@@ -211,7 +237,6 @@ module ActiveRecord
                :release_savepoint,
                :current_savepoint_name,
                :begin_db_transaction,
-               :rollback_db_transaction,
                :to => :master_connection
       delegate *ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods,
                :to => :master_connection
@@ -281,7 +306,6 @@ module ActiveRecord
         with(master_connection, :master) do |conn|
           yield(conn).tap do
             unless open_transaction?
-              debug "update_clock"
               if mc = master_clock
                 self.current_clock = mc unless current_clock.try(:>=, mc)
               end
@@ -322,6 +346,14 @@ module ActiveRecord
 
       def connection_stack
         Thread.current[:master_slave_connection] ||= []
+      end
+
+      def on_commit_callbacks
+        Thread.current[:on_commit_callbacks] ||= []
+      end
+
+      def on_rollback_callbacks
+        Thread.current[:on_rollback_callbacks] ||= []
       end
     end
   end

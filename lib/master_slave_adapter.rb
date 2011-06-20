@@ -215,6 +215,8 @@ module ActiveRecord
                :to => :master_connection
       delegate *ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods,
                :to => :master_connection
+      # silly: :tables is commented in SchemaStatements.
+      delegate :tables, :to => :master_connection
 
       # determine read connection
       delegate :select_all,

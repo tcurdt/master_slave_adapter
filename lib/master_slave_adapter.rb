@@ -106,6 +106,10 @@ module ActiveRecord
         def self.zero
           @zero ||= Clock.new('', 0)
         end
+
+        def self.infinity
+          @infinity ||= Clock.new('', Float::MAX.to_i)
+        end
       end
 
       checkout :active?

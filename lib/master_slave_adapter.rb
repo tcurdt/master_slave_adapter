@@ -221,7 +221,7 @@ module ActiveRecord
 
       # ADAPTER INTERFACE DELEGATES ===========================================
 
-      # must go to master
+      # === must go to master
       delegate :adapter_name,
                :supports_migrations?,
                :supports_primary_key?,
@@ -245,7 +245,7 @@ module ActiveRecord
       # monkey patch from databasecleaner gem
       delegate :truncate_table, :to => :master_connection
 
-      # determine read connection
+      # === determine read connection
       delegate :select_all,
                :select_one,
                :select_rows,
@@ -257,6 +257,10 @@ module ActiveRecord
         open_transaction? ? master_connection : self.current_connection
       end
       private :connection_for_read
+
+      # === doesn't really matter, but must be handled by underlying adapter
+      delegate *ActiveRecord::ConnectionAdapters::Quoting.instance_methods,
+               :to => :current_connection
 
       # UTIL ==================================================================
 

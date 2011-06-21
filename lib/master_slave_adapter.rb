@@ -219,6 +219,13 @@ module ActiveRecord
         self.connections.each { |c| c.reset! }
       end
 
+      # Someone calling execute directly on the connection is likely to be a
+      # write, respectively some DDL statement. People really shouldn't do that,
+      # but let's delegate this to master, just to be sure.
+      def execute(*args)
+        on_write { |conn| conn.execute(*args) }
+      end
+
       # ADAPTER INTERFACE DELEGATES ===========================================
 
       # === must go to master

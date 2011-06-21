@@ -8,6 +8,7 @@ module ActiveRecord
           connection.with_consistency(clock, &blk)
         else
           yield
+          nil
         end
       end
 

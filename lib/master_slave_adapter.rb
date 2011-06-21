@@ -217,6 +217,8 @@ module ActiveRecord
                :to => :master_connection
       # silly: :tables is commented in SchemaStatements.
       delegate :tables, :to => :master_connection
+      # monkey patch from databasecleaner gem
+      delegate :truncate_table, :to => :master_connection
 
       # determine read connection
       delegate :select_all,

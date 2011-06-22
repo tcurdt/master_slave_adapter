@@ -257,6 +257,18 @@ module ActiveRecord
                :truncate_table, # monkeypatching database_cleaner gem
                :primary_key,    # is Base#primary_key meant to be the contract?
                :to => :master_connection
+      # ok, we might have missed more
+      def method_missing(name, *args, &blk)
+        master_connection.send(name.to_sym, *args, &blk).tap do
+          warn %Q{
+            You called the unsupported method '#{name}' on #{self.class.name}.
+            In order to help us improve master_slave_adapter, please report this
+            to: https://github.com/soundcloud/master_slave_adapter/issues
+
+            Thank you.
+          }
+        end
+      end
 
       # === determine read connection
       delegate :select_all,
@@ -350,6 +362,10 @@ module ActiveRecord
 
       def info(msg)
         logger.try(:info, msg)
+      end
+
+      def warn(msg)
+        logger.try(:warn, msg)
       end
 
       def debug(msg)

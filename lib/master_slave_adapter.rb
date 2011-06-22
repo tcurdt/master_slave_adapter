@@ -252,10 +252,11 @@ module ActiveRecord
                :to => :master_connection
       delegate *ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods,
                :to => :master_connection
-      # silly: :tables is commented in SchemaStatements.
-      delegate :tables, :to => :master_connection
-      # monkey patch from databasecleaner gem
-      delegate :truncate_table, :to => :master_connection
+      # no clear interface contract:
+      delegate :tables,         # commented in SchemaStatements
+               :truncate_table, # monkeypatching database_cleaner gem
+               :primary_key,    # is Base#primary_key meant to be the contract?
+               :to => :master_connection
 
       # === determine read connection
       delegate :select_all,

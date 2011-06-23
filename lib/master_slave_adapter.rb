@@ -142,7 +142,7 @@ module ActiveRecord
         # try random slave, else fall back to master
         slave = slave_connection!
         conn =
-          if !open_transaction? && slave_clock(slave) >= clock
+          if !open_transaction? && slave_clock(slave).try(:>=, clock)
             [ slave, :slave ]
           else
             [ master_connection, :master ]

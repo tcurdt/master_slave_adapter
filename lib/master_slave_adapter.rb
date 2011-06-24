@@ -142,7 +142,7 @@ module ActiveRecord
         # try random slave, else fall back to master
         slave = slave_connection!
         conn =
-          if !open_transaction? && slave_clock(slave) >= clock
+          if !open_transaction? && slave_clock(slave).try(:>=, clock)
             [ slave, :slave ]
           else
             [ master_connection, :master ]
@@ -249,6 +249,20 @@ module ActiveRecord
                :release_savepoint,
                :current_savepoint_name,
                :begin_db_transaction,
+               :outside_transaction?,
+               :add_limit!,
+               :add_limit_offset!,
+               :add_lock!,
+               :default_sequence_name,
+               :reset_sequence!,
+               :insert_fixture,
+               :empty_insert_statement,
+               :case_sensitive_equality_operator,
+               :limited_update_conditions,
+               :insert_sql,
+               :update_sql,
+               :delete_sql,
+               :sanitize_limit,
                :to => :master_connection
       delegate *ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods,
                :to => :master_connection

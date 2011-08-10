@@ -302,9 +302,7 @@ module ActiveRecord
       delegate *(ActiveRecord::ConnectionAdapters::Quoting.instance_methods + [{
                :to => :current_connection }])
       # issue #4: current_database is not supported by all adapters, though
-      if current_connection.respond_to?(:current_database)
-        delegate :current_database, :to => :current_connection
-      end
+      delegate :current_database, :to => :current_connection
 
       # UTIL ==================================================================
 

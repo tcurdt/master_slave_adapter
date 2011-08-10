@@ -47,8 +47,9 @@ module ActiveRecord
       def massage(config)
         config = config.symbolize_keys
         skip = [ :adapter, :connection_adapter, :master, :slaves ]
-        defaults = config.reject { |k,_| skip.include?(k) }
-                         .merge(:adapter => config.fetch(:connection_adapter))
+        defaults = config.
+          reject { |k,_| skip.include?(k) }.
+          merge(:adapter => config.fetch(:connection_adapter))
         ([config.fetch(:master)] + config.fetch(:slaves, [])).map do |cfg|
           cfg.symbolize_keys!.reverse_merge!(defaults)
         end
@@ -264,8 +265,8 @@ module ActiveRecord
                :delete_sql,
                :sanitize_limit,
                :to => :master_connection
-      delegate *ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods,
-               :to => :master_connection
+      delegate *(ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods + [{
+               :to => :master_connection }])
       # no clear interface contract:
       delegate :tables,         # commented in SchemaStatements
                :truncate_table, # monkeypatching database_cleaner gem
@@ -298,8 +299,8 @@ module ActiveRecord
       private :connection_for_read
 
       # === doesn't really matter, but must be handled by underlying adapter
-      delegate *ActiveRecord::ConnectionAdapters::Quoting.instance_methods,
-               :to => :current_connection
+      delegate *(ActiveRecord::ConnectionAdapters::Quoting.instance_methods + [{
+               :to => :current_connection }])
       # issue #4: current_database is not supported by all adapters, though
       if current_connection.respond_to?(:current_database)
         delegate :current_database, :to => :current_connection

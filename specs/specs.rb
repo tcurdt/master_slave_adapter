@@ -342,7 +342,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
     context "with nested with_consistency" do
       it "should return the same clock if not writing and no lag" do
-        slave_should_report_clock([ 0, 0 ])
+        slave_should_report_clock(0) # note: tests memoizing slave clock
         slave_connection.
           should_receive('select_one').exactly(3).times.with('testing').
           and_return(true)
@@ -359,7 +359,9 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       end
 
       it "requesting a newer clock should return a new clock" do
-        slave_should_report_clock([0,0])
+        adapter_connection.
+          should_receive('slave_consistent?').exactly(2).times.
+          and_return(true, false)
         slave_connection.
           should_receive('select_all').exactly(2).times.with('testing').
           and_return(true)

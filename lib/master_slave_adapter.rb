@@ -143,7 +143,7 @@ module ActiveRecord
         # try random slave, else fall back to master
         slave = slave_connection!
         conn =
-          if !open_transaction? && slave_clock(slave).try(:>=, clock)
+          if !open_transaction? && slave_consistent?(slave, clock)
             [ slave, :slave ]
           else
             [ master_connection, :master ]
@@ -343,11 +343,16 @@ module ActiveRecord
         end
       end
 
-      def slave_clock(connection = nil)
-        conn ||= slave_connection!
+      def slave_clock(conn)
         if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
-          Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
+          Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']).tap do |c|
+            set_last_seen_slave_clock(conn, c)
+          end
         end
+      end
+
+      def slave_consistent?(conn, clock)
+        (get_last_seen_slave_clock(conn) || slave_clock(conn)).try(:>=, clock)
       end
 
     protected
@@ -408,6 +413,17 @@ module ActiveRecord
 
       def on_rollback_callbacks
         Thread.current[:on_rollback_callbacks] ||= []
+      end
+
+      def get_last_seen_slave_clock(conn)
+        conn.instance_variable_get(:@last_seen_slave_clock)
+      end
+
+      def set_last_seen_slave_clock(conn, clock)
+        last_seen = get_last_seen_slave_clock(conn)
+        if last_seen.nil? || last_seen < clock
+          conn.instance_variable_set(:@last_seen_slave_clock, clock)
+        end
       end
     end
   end

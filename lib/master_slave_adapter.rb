@@ -352,7 +352,12 @@ module ActiveRecord
       end
 
       def slave_consistent?(conn, clock)
-        (get_last_seen_slave_clock(conn) || slave_clock(conn)).try(:>=, clock)
+        last_seen = get_last_seen_slave_clock(conn)
+        if !last_seen.nil? && last_seen >= clock
+          true
+        else
+          slave_clock(conn).try(:>=, clock)
+        end
       end
 
     protected

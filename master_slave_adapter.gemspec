@@ -4,7 +4,7 @@ $:.push File.expand_path("../lib", __FILE__)
 Gem::Specification.new do |s|
   s.name        = 'master_slave_adapter_soundcloud'
   s.version     = File.read('VERSION').to_s
-  s.date        = '2011-06-21'
+  s.date        = '2011-08-24'
   s.platform    = Gem::Platform::RUBY
   s.authors     = [ 'Mauricio Linhares', 'Torsten Curdt', 'Kim Altintop', 'Omid Aladini', 'SoundCloud' ]
   s.email       = %q{kim@soundcloud.com tcurdt@soundcloud.com omid@soundcloud.com}

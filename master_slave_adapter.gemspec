@@ -1,10 +1,9 @@
-# -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
 
 Gem::Specification.new do |s|
   s.name        = 'master_slave_adapter_soundcloud'
-  s.version     = '0.1.8' 
-  s.date        = '2011-11-15'
+  s.version     = File.read('VERSION').to_s
+  s.date        = '2011-08-24'
   s.platform    = Gem::Platform::RUBY
   s.authors     = [ 'Mauricio Linhares', 'Torsten Curdt', 'Kim Altintop', 'Omid Aladini', 'SoundCloud' ]
   s.email       = %q{kim@soundcloud.com tcurdt@soundcloud.com omid@soundcloud.com}
@@ -21,17 +20,5 @@ Gem::Specification.new do |s|
   s.required_rubygems_version = '>= 1.3.7'
   s.add_development_dependency 'rspec'
 
-  s.add_dependency 'activerecord', '>= 2.3.9'
-  # = MANIFEST =
-  s.files = %w[
-    Gemfile
-    LICENSE
-    Rakefile
-    Readme.md
-    lib/active_record/connection_adapters/master_slave_adapter.rb
-    lib/master_slave_adapter.rb
-    master_slave_adapter.gemspec
-    specs/specs.rb
-  ]
-  # = MANIFEST =
+  s.add_dependency 'activerecord', '~> 2.3.9'
 end

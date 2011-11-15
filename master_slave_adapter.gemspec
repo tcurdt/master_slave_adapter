@@ -28,7 +28,6 @@ Gem::Specification.new do |s|
     LICENSE
     Rakefile
     Readme.md
-    VERSION
     lib/active_record/connection_adapters/master_slave_adapter.rb
     lib/master_slave_adapter.rb
     master_slave_adapter.gemspec

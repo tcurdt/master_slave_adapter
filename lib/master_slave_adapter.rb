@@ -87,6 +87,7 @@ module ActiveRecord
     end
 
     class MasterSlaveAdapter < AbstractAdapter
+      VERSION = '0.1.8'
 
       class Clock
         include Comparable

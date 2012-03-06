@@ -84,7 +84,9 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       end
     end
 
-    xit "should call 'columns' on master" do
+    it "should call 'columns' on master" do
+      master_connection.should_receive(:columns)
+      adapter_connection.columns
     end
 
     SelectMethods.each do |method|
@@ -137,6 +139,11 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         master_connection.should_receive( method ).and_return( true )
         adapter_connection.send( method )
       end
+    end
+
+    it "should call #visitor on master connection" do
+      master_connection.should_receive(:visitor)
+      adapter_connection.visitor
     end
 
     it 'should be a master slave connection' do

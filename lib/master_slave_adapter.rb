@@ -271,6 +271,9 @@ module ActiveRecord
                :to => :master_connection
       delegate *(ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods + [{
                :to => :master_connection }])
+      # ActiveRecord 3.0
+      delegate :visitor,
+               :to => :master_connection
       # no clear interface contract:
       delegate :tables,         # commented in SchemaStatements
                :truncate_table, # monkeypatching database_cleaner gem

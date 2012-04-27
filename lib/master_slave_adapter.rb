@@ -229,6 +229,22 @@ module ActiveRecord
         connections.each { |c| c.reset! }
       end
 
+      def cache(&block)
+        connections.inject(block) do |block, connection|
+          lambda { connection.cache(&block) }
+        end.call
+      end
+
+      def uncached(&block)
+        connections.inject(block) do |block, connection|
+          lambda { connection.uncached(&block) }
+        end.call
+      end
+
+      def clear_query_cache
+        connections.each { |connection| connection.clear_query_cache }
+      end
+
       # Someone calling execute directly on the connection is likely to be a
       # write, respectively some DDL statement. People really shouldn't do that,
       # but let's delegate this to master, just to be sure.

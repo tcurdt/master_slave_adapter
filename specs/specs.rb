@@ -44,14 +44,14 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       'master connection',
       mocked_methods.merge(:open_transactions => 0)
     ).tap do |conn|
-      conn.stub!(:uncached) { |blk| blk.call }
+      conn.stub!(:uncached).and_yield
       ActiveRecord::Base.master_mock = conn
     end
   end
 
   let!(:slave_connection) do
     mock('slave connection', mocked_methods).tap do |conn|
-      conn.stub!(:uncached) { |blk| blk.call }
+      conn.stub!(:uncached).and_yield
       ActiveRecord::Base.slave_mock = conn
     end
   end

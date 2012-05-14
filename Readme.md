@@ -1,4 +1,4 @@
-# Replication Aware Master Slave Adapter
+# Replication Aware Master Slave Adapter [![Build Status](https://secure.travis-ci.org/soundcloud/large-hadron-migrator.png)][6]
 
 Improved version of the [master_slave_adapter plugin][1], packaged as a gem.
 
@@ -178,3 +178,4 @@ $ bundle install
 [3]: http://www.yourdailygeekery.com/2011/06/14/master-slave-consistency.html
 [4]: http://backstage.soundcloud.com
 [5]: http://cukes.info
+[6]: http://travis-ci.org/soundcloud/master_slave_adapter

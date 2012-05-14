@@ -80,6 +80,27 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
+    module ConnectionDelegate
+      def delegate_if_available(*methods)
+        options = methods.pop
+        unless options.is_a?(Hash) && to = options[:to]
+          raise ArgumentError, "Delegation needs a target. Supply an options hash with a :to key as the last argument (e.g. delegate_if_available :hello, :to => :greeter)."
+        end
+
+        methods.each do |method|
+          module_eval(<<-EOS)
+            def #{method}(*args, &block)
+              begin
+                #{to}.__send__(#{method.inspect}, *args, &block)
+              rescue Exception => e
+                #The class that uses this can decide what to do with the exception
+                self.rescued_exception(:#{method}, e)
+              end
+            end
+          EOS
+        end
+      end
+    end
 
     class AbstractAdapter
       alias_method :orig_log_info, :log_info
@@ -91,6 +112,9 @@ module ActiveRecord
     end
 
     class MasterSlaveAdapter < AbstractAdapter
+      extend ConnectionDelegate
+
+      class MasterUnavailable < Exception; end
 
       class Clock
         include Comparable
@@ -272,8 +296,6 @@ module ActiveRecord
                :begin_db_transaction,
                :outside_transaction?,
                :add_limit!,
-               :add_limit_offset!,
-               :add_lock!,
                :default_sequence_name,
                :reset_sequence!,
                :insert_fixture,
@@ -295,6 +317,23 @@ module ActiveRecord
                :truncate_table, # monkeypatching database_cleaner gem
                :primary_key,    # is Base#primary_key meant to be the contract?
                :to => :master_connection
+
+      # We need these ones to have the website up at least
+      # Tries to delegate to master and fallsback to
+      delegate_if_available   :columns,
+                              :add_limit_offset!,
+                              :add_lock!,
+                              :table_alias_for,
+                              :to => :master_connection
+
+      # === from module ConnectionDelegate
+      def rescued_exception(method, exception)
+        puts "exception: #{exception}"
+        #For now, let's just re-raise the exception
+        #Will do some fancier stuff later
+        raise exception
+      end
+
       # ok, we might have missed more
       def method_missing(name, *args, &blk)
         master_connection.send(name.to_sym, *args, &blk).tap do
@@ -330,6 +369,7 @@ module ActiveRecord
       # UTIL ==================================================================
 
       def master_connection
+        raise MasterUnavailable if @connections[:master].nil?
         @connections[:master]
       end
 
@@ -403,12 +443,16 @@ module ActiveRecord
     private
 
       def connect(cfg, name)
-        adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
-        ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
+        begin
+          adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
+          ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
+        rescue Exception => e
+          @logger.try(:warn, "Failed to connect: #{e}")
+        end
       end
 
       def open_transaction?
-        master_connection.open_transactions > 0
+        @connections[:master].nil? ? false : master_connection.open_transactions > 0
       end
 
       def connection_stack

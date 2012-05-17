@@ -1,6 +1,8 @@
 require 'active_record'
 
 module ActiveRecord
+  class MasterUnavailable < Exception; end
+
   class Base
     class << self
       def with_consistency(clock, &blk)
@@ -94,7 +96,7 @@ module ActiveRecord
                 #{to}.__send__(#{method.inspect}, *args, &block)
               rescue Exception => e
                 #The class that uses this can decide what to do with the exception
-                self.rescued_exception(:#{method}, e)
+                self.rescued_exception(#{method.inspect}, e, *args, &block)
               end
             end
           EOS
@@ -113,8 +115,6 @@ module ActiveRecord
 
     class MasterSlaveAdapter < AbstractAdapter
       extend ConnectionDelegate
-
-      class MasterUnavailable < Exception; end
 
       class Clock
         include Comparable
@@ -317,22 +317,13 @@ module ActiveRecord
                :truncate_table, # monkeypatching database_cleaner gem
                :primary_key,    # is Base#primary_key meant to be the contract?
                :to => :master_connection
-
-      # We need these ones to have the website up at least
-      # Tries to delegate to master and fallsback to
-      delegate_if_available   :columns,
-                              :add_limit_offset!,
-                              :add_lock!,
-                              :table_alias_for,
-                              :to => :master_connection
-
-      # === from module ConnectionDelegate
-      def rescued_exception(method, exception)
-        puts "exception: #{exception}"
-        #For now, let's just re-raise the exception
-        #Will do some fancier stuff later
-        raise exception
-      end
+      # No need to be so picky about these methods
+      delegate_if_available :add_limit_offset!, # DatabaseStatements
+                            :add_lock!, #DatabaseStatements
+                            #SchemaStatement: Can they be called on the slaves safely?
+                            :columns,
+                            :table_alias_for,
+                            :to => :master_connection
 
       # ok, we might have missed more
       def method_missing(name, *args, &blk)
@@ -369,8 +360,7 @@ module ActiveRecord
       # UTIL ==================================================================
 
       def master_connection
-        raise MasterUnavailable if @connections[:master].nil?
-        @connections[:master]
+        @connections[:master].nil? ? (raise MasterUnavailable) : @connections[:master]
       end
 
       # Returns a random slave connection
@@ -419,6 +409,14 @@ module ActiveRecord
           slave_clock(conn).try(:>=, clock)
       end
 
+      # === from module ConnectionDelegate
+      def rescued_exception(method, exception, *args, &block)
+        @logger.try(:warn, "Exception while executing #{method}: #{exception}, falling back to slave")
+        #TODO: For now, let's just retry on the slave, let it throw exceptions... we try only in case
+        #of MasterUnavailable?
+        connection_for_read.send(method, *args, &block) if exception.class.equal? ActiveRecord::MasterUnavailable
+      end
+
     protected
 
       def on_write
@@ -447,12 +445,14 @@ module ActiveRecord
           adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
           ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
         rescue Exception => e
-          @logger.try(:warn, "Failed to connect: #{e}")
+          @logger.try(:warn, "Failed to connect: #{e} and config: #{cfg}")
+          #TODO Can we simply deal with the exception here and silently fail to connect?
+          nil
         end
       end
 
       def open_transaction?
-        @connections[:master].nil? ? false : master_connection.open_transactions > 0
+        @connections[:master].nil? ? false : (master_connection.open_transactions > 0)
       end
 
       def connection_stack

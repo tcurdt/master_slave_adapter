@@ -1,0 +1,6 @@
+Read only mode
+--------------
+
+- Implement connection error check
+- Add Circuit Breaker pattern in order to not reconnect too often
+- Add fallback to connection_for_read again

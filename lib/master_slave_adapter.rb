@@ -1,5 +1,26 @@
 require 'active_record'
 
+module RescuedDelegate
+  def rescued_delegate(*methods, options)
+    unless options.is_a?(Hash) && to = options[:to]
+      raise ArgumentError, "Delegation needs a target. Supply an options hash with a :to key as the last argument (e.g. rescued_delegate :hello, :to => :greeter)."
+    end
+    error_handler = options[:on_error]
+
+    methods.each do |method|
+      module_eval(<<-EOS)
+        def #{method}(*args, &block)
+          begin
+            #{to}.__send__(:#{method}, *args, &block)
+          rescue Exception => e
+            #{error_handler ? "#{error_handler}(e, :#{method}, *args, &block)" : "raise"}
+          end
+        end
+      EOS
+    end
+  end
+end
+
 module ActiveRecord
   class MasterUnavailable < Exception; end
 
@@ -82,28 +103,6 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
-    module ConnectionDelegate
-      def delegate_if_available(*methods)
-        options = methods.pop
-        unless options.is_a?(Hash) && to = options[:to]
-          raise ArgumentError, "Delegation needs a target. Supply an options hash with a :to key as the last argument (e.g. delegate_if_available :hello, :to => :greeter)."
-        end
-
-        methods.each do |method|
-          module_eval(<<-EOS)
-            def #{method}(*args, &block)
-              begin
-                #{to}.__send__(#{method.inspect}, *args, &block)
-              rescue Exception => e
-                #The class that uses this can decide what to do with the exception
-                self.rescued_exception(#{method.inspect}, e, *args, &block)
-              end
-            end
-          EOS
-        end
-      end
-    end
-
     class AbstractAdapter
       alias_method :orig_log_info, :log_info
       def log_info(sql, name, ms)
@@ -114,7 +113,7 @@ module ActiveRecord
     end
 
     class MasterSlaveAdapter < AbstractAdapter
-      extend ConnectionDelegate
+      extend RescuedDelegate
 
       class Clock
         include Comparable
@@ -147,11 +146,13 @@ module ActiveRecord
       def initialize(config, logger)
         super(nil, logger)
 
-        @connections = {}
-        @connections[:master] = connect(config.fetch(:master), :master)
-        @connections[:slaves] = config.fetch(:slaves).map { |cfg| connect(cfg, :slave) }
+        @config = config
 
-        @disable_connection_test = config.delete(:disable_connection_test) == 'true'
+        @connections = {}
+        @connections[:master] = connect_to_master
+        @connections[:slaves] = @config.fetch(:slaves).map { |cfg| connect(cfg, :slave) }
+
+        @disable_connection_test = @config[:disable_connection_test] == 'true'
 
         self.current_connection = slave_connection!
       end
@@ -279,51 +280,84 @@ module ActiveRecord
       # ADAPTER INTERFACE DELEGATES ===========================================
 
       # === must go to master
-      delegate :adapter_name,
-               :supports_migrations?,
-               :supports_primary_key?,
-               :supports_savepoints?,
-               :native_database_types,
-               :raw_connection,
-               :open_transactions,
-               :increment_open_transactions,
-               :decrement_open_transactions,
-               :transaction_joinable=,
-               :create_savepoint,
-               :rollback_to_savepoint,
-               :release_savepoint,
-               :current_savepoint_name,
-               :begin_db_transaction,
-               :outside_transaction?,
-               :add_limit!,
-               :default_sequence_name,
-               :reset_sequence!,
-               :insert_fixture,
-               :empty_insert_statement,
-               :case_sensitive_equality_operator,
-               :limited_update_conditions,
-               :insert_sql,
-               :update_sql,
-               :delete_sql,
-               :sanitize_limit,
-               :to => :master_connection
-      delegate *(ActiveRecord::ConnectionAdapters::SchemaStatements.instance_methods + [{
-               :to => :master_connection }])
+      rescued_delegate :adapter_name,
+                       :supports_migrations?,
+                       :supports_primary_key?,
+                       :supports_savepoints?,
+                       :native_database_types,
+                       :raw_connection,
+                       :open_transactions,
+                       :increment_open_transactions,
+                       :decrement_open_transactions,
+                       :transaction_joinable=,
+                       :create_savepoint,
+                       :rollback_to_savepoint,
+                       :release_savepoint,
+                       :current_savepoint_name,
+                       :begin_db_transaction,
+                       :outside_transaction?,
+                       :add_limit!,
+                       :default_sequence_name,
+                       :reset_sequence!,
+                       :insert_fixture,
+                       :empty_insert_statement,
+                       :case_sensitive_equality_operator,
+                       :limited_update_conditions,
+                       :insert_sql,
+                       :update_sql,
+                       :delete_sql,
+                       :sanitize_limit,
+                       :to => :master_connection,
+                       :on_error => :handle_master_error
+      # schema statements
+      rescued_delegate :native_database_types,
+                       :table_exists?,
+                       :create_table,
+                       :change_table,
+                       :rename_table,
+                       :drop_table,
+                       :add_column,
+                       :remove_column,
+                       :remove_columns,
+                       :change_column,
+                       :change_column_default,
+                       :rename_column,
+                       :add_index,
+                       :remove_index,
+                       :remove_index!,
+                       :rename_index,
+                       :index_name,
+                       :index_exists?,
+                       :structure_dump,
+                       :dump_schema_information,
+                       :initialize_schema_migrations_table,
+                       :assume_migrated_upto_version,
+                       :type_to_sql,
+                       :add_column_options!,
+                       :distinct,
+                       :add_order_by_for_association_limiting!,
+                       :add_timestamps,
+                       :remove_timestamps,
+                       :quoted_columns_for_index,
+                       :options_include_default?,
+                       :to => :master_connection
       # ActiveRecord 3.0
-      delegate :visitor,
-               :to => :master_connection
+      rescued_delegate :visitor,
+                       :to => :master_connection,
+                       :on_error => :handle_master_error
       # no clear interface contract:
-      delegate :tables,         # commented in SchemaStatements
-               :truncate_table, # monkeypatching database_cleaner gem
-               :primary_key,    # is Base#primary_key meant to be the contract?
-               :to => :master_connection
+      rescued_delegate :tables,         # commented in SchemaStatements
+                       :truncate_table, # monkeypatching database_cleaner gem
+                       :primary_key,    # is Base#primary_key meant to be the contract?
+                       :to => :master_connection,
+                       :on_error => :handle_master_error
       # No need to be so picky about these methods
-      delegate_if_available :add_limit_offset!, # DatabaseStatements
-                            :add_lock!, #DatabaseStatements
-                            #SchemaStatement: Can they be called on the slaves safely?
-                            :columns,
-                            :table_alias_for,
-                            :to => :master_connection
+      rescued_delegate :add_limit_offset!, # DatabaseStatements
+                       :add_lock!, #DatabaseStatements
+                       :columns,
+                       :table_alias_for,
+                       :to => :prefer_master_connection,
+                       :on_error => :handle_master_error
 
       # ok, we might have missed more
       def method_missing(name, *args, &blk)
@@ -336,6 +370,8 @@ module ActiveRecord
             Thank you.
           })
         end
+      rescue Exception => exception
+        handle_master_error(exception)
       end
 
       # === determine read connection
@@ -345,6 +381,10 @@ module ActiveRecord
                :select_value,
                :select_values,
                :to => :connection_for_read
+
+      def prefer_master_connection
+        master_available? ? master_connection : slave_connection!
+      end
 
       def connection_for_read
         open_transaction? ? master_connection : current_connection
@@ -360,7 +400,17 @@ module ActiveRecord
       # UTIL ==================================================================
 
       def master_connection
-        @connections[:master].nil? ? (raise MasterUnavailable) : @connections[:master]
+        # TODO: add circuit breaker
+        @connections[:master] ||= connect_to_master
+        @connections[:master] || raise(MasterUnavailable)
+      end
+
+      def master_available?
+        !@connections[:master].nil?
+      end
+
+      def reset_master_connection
+        @connections[:master] = nil
       end
 
       # Returns a random slave connection
@@ -391,12 +441,14 @@ module ActiveRecord
 
       def master_clock
         conn = master_connection
+        # TODO: should be extracted into adapter specific code
         if status = conn.uncached { conn.select_one("SHOW MASTER STATUS") }
           Clock.new(status['File'], status['Position'])
         end
       end
 
       def slave_clock(conn)
+        # TODO: should be extracted into adapter specific code
         if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']).tap do |c|
             set_last_seen_slave_clock(conn, c)
@@ -409,15 +461,17 @@ module ActiveRecord
           slave_clock(conn).try(:>=, clock)
       end
 
-      # === from module ConnectionDelegate
-      def rescued_exception(method, exception, *args, &block)
-        @logger.try(:warn, "Exception while executing #{method}: #{exception}, falling back to slave")
-        #TODO: For now, let's just retry on the slave, let it throw exceptions... we try only in case
-        #of MasterUnavailable?
-        connection_for_read.send(method, *args, &block) if exception.class.equal? ActiveRecord::MasterUnavailable
-      end
-
     protected
+
+      def handle_master_error(exception, method, *args, &block)
+        @logger.try(:warn, "Exception while executing #{method}: #{exception}, falling back to slave")
+        if connection_error?(exception)
+          reset_master_connection
+          raise MasterUnavailable
+        else
+          raise exception
+        end
+      end
 
       def on_write
         with(master_connection) do |conn|
@@ -441,18 +495,12 @@ module ActiveRecord
     private
 
       def connect(cfg, name)
-        begin
-          adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
-          ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
-        rescue Exception => e
-          @logger.try(:warn, "Failed to connect: #{e} and config: #{cfg}")
-          #TODO Can we simply deal with the exception here and silently fail to connect?
-          nil
-        end
+        adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
+        ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
       end
 
       def open_transaction?
-        @connections[:master].nil? ? false : (master_connection.open_transactions > 0)
+        master_available? ? (master_connection.open_transactions > 0) : false
       end
 
       def connection_stack
@@ -476,6 +524,18 @@ module ActiveRecord
         if last_seen.nil? || last_seen < clock
           conn.instance_variable_set(:@last_seen_slave_clock, clock)
         end
+      end
+
+      def connect_to_master
+        connect(@config.fetch(:master), :master)
+      rescue StatementInvalid => exception
+        connection_error?(exception) ? nil : raise
+      end
+
+      def connection_error?(exception)
+        # TODO: check for error numbers
+        # TODO: should be extracted into adapter specific code
+        exception === ActiveRecord::StatementInvalid && true
       end
     end
   end

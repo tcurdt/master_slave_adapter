@@ -32,9 +32,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
   let(:mocked_methods) do
     {
-      #:verify! => true,
       :reconnect! => true,
-      #:run_callbacks => true,
       :disconnect! => true,
     }
   end

@@ -427,10 +427,6 @@ module ActiveRecord
         connection_stack.first
       end
 
-      def current_connection=(conn)
-        connection_stack.unshift conn
-      end
-
       def current_clock
         Thread.current[:master_slave_clock]
       end
@@ -481,7 +477,7 @@ module ActiveRecord
                 self.current_clock = mc unless current_clock.try(:>=, mc)
               end
               # keep using master after write
-              self.current_connection = conn
+              connection_stack.replace([ conn ])
             end
           end
         end
@@ -489,7 +485,7 @@ module ActiveRecord
 
       def with(conn)
         self.current_connection = conn
-        yield(conn).tap { connection_stack.shift }
+        yield(conn).tap { connection_stack.shift if connection_stack.size > 1 }
       end
 
     private
@@ -505,6 +501,10 @@ module ActiveRecord
 
       def connection_stack
         Thread.current[:master_slave_connection] ||= []
+      end
+
+      def current_connection=(conn)
+        connection_stack.unshift(conn)
       end
 
       def on_commit_callbacks

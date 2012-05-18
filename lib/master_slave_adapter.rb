@@ -7,13 +7,16 @@ module RescuedDelegate
     end
     error_handler = options[:on_error]
 
+    file, line = caller.first.split(':', 2)
+    line = line.to_i
+
     methods.each do |method|
-      module_eval(<<-EOS)
+      module_eval(<<-EOS, file, line)
         def #{method}(*args, &block)
           begin
             #{to}.__send__(:#{method}, *args, &block)
           rescue Exception => e
-            #{error_handler ? "#{error_handler}(e, :#{method}, *args, &block)" : "raise"}
+            #{error_handler ? "#{error_handler}(e, :#{to}, :#{method}, *args, &block)" : "raise"}
           end
         end
       EOS
@@ -371,7 +374,7 @@ module ActiveRecord
           })
         end
       rescue Exception => exception
-        handle_master_error(exception, name.to_sym)
+        handle_master_error(exception, :master_connection, name.to_sym)
       end
 
       # === determine read connection
@@ -463,11 +466,11 @@ module ActiveRecord
 
     protected
 
-      def handle_master_error(exception, method, *args, &block)
-        @logger.try(:warn, "Exception while executing #{method}: #{exception}, falling back to slave")
+      def handle_master_error(exception, to, method, *args, &block)
+        @logger.try(:warn, "Exception while executing #{method}: #{exception}")
         if connection_error?(exception)
           reset_master_connection
-          raise MasterUnavailable
+          send(to).send(method, *args, &block)
         else
           raise exception
         end

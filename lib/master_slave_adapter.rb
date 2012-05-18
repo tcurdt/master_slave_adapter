@@ -371,7 +371,7 @@ module ActiveRecord
           })
         end
       rescue Exception => exception
-        handle_master_error(exception)
+        handle_master_error(exception, name.to_sym)
       end
 
       # === determine read connection

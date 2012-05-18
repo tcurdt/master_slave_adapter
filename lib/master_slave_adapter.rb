@@ -539,7 +539,7 @@ module ActiveRecord
       def connection_error?(exception)
         # TODO: check for error numbers
         # TODO: should be extracted into adapter specific code
-        exception === ActiveRecord::StatementInvalid && true
+        ActiveRecord::StatementInvalid === exception && true
       end
     end
   end

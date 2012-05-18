@@ -22,7 +22,7 @@ module RescuedDelegate
 end
 
 module ActiveRecord
-  class MasterUnavailable < Exception; end
+  class MasterUnavailable < ConnectionNotEstablished; end
 
   class Base
     class << self

@@ -443,6 +443,10 @@ module ActiveRecord
         end
       end
 
+      def slave_clock!
+        slave_clock(slave_connection!)
+      end
+
       def slave_clock(conn)
         # TODO: should be extracted into adapter specific code
         if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }

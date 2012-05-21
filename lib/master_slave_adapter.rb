@@ -267,8 +267,10 @@ module ActiveRecord
             def #{method}(*args, &block)
               begin
                 #{to}.__send__(:#{method}, *args, &block)
+              rescue MasterUnavailable
+                #{fallback ? "#{fallback}.__send__(:#{method}, *args, *block)" : "raise"}
               rescue => exception
-                if connection_error?(exception)
+                if master_connection?(#{to}) && connection_error?(exception)
                   reset_master_connection
                   #{fallback ? "#{fallback}.__send__(:#{method}, *args, *block)" : "raise MasterUnavailable"}
                 else
@@ -311,8 +313,7 @@ module ActiveRecord
                        :sanitize_limit,
                        :to => :master_connection
       # schema statements
-      rescued_delegate :native_database_types,
-                       :table_exists?,
+      rescued_delegate :table_exists?,
                        :create_table,
                        :change_table,
                        :rename_table,
@@ -379,12 +380,12 @@ module ActiveRecord
       end
 
       # === determine read connection
-      delegate :select_all,
-               :select_one,
-               :select_rows,
-               :select_value,
-               :select_values,
-               :to => :connection_for_read
+      rescued_delegate :select_all,
+                       :select_one,
+                       :select_rows,
+                       :select_value,
+                       :select_values,
+                       :to => :connection_for_read
 
       def connection_for_read
         open_transaction? ? master_connection : current_connection
@@ -412,6 +413,10 @@ module ActiveRecord
           circuit.fail!
           raise MasterUnavailable
         end
+      end
+
+      def master_connection?(connection)
+        @connections[:master] == connection
       end
 
       def master_available?
@@ -545,8 +550,6 @@ module ActiveRecord
         ]
 
         case exception
-        when ActiveRecord::MasterUnavailable
-          true
         when ActiveRecord::StatementInvalid
           connection_errors.include?(current_connection.raw_connection.errno)
         when Mysql::Error

@@ -1,29 +1,5 @@
 require 'active_record'
 
-module RescuedDelegate
-  def rescued_delegate(*methods, options)
-    unless options.is_a?(Hash) && to = options[:to]
-      raise ArgumentError, "Delegation needs a target. Supply an options hash with a :to key as the last argument (e.g. rescued_delegate :hello, :to => :greeter)."
-    end
-    error_handler = options[:on_error]
-
-    file, line = caller.first.split(':', 2)
-    line = line.to_i
-
-    methods.each do |method|
-      module_eval(<<-EOS, file, line)
-        def #{method}(*args, &block)
-          begin
-            #{to}.__send__(:#{method}, *args, &block)
-          rescue Exception => e
-            #{error_handler ? "#{error_handler}(e, :#{to}, :#{method}, *args, &block)" : "raise"}
-          end
-        end
-      EOS
-    end
-  end
-end
-
 module ActiveRecord
   class MasterUnavailable < ConnectionNotEstablished; end
 
@@ -116,8 +92,6 @@ module ActiveRecord
     end
 
     class MasterSlaveAdapter < AbstractAdapter
-      extend RescuedDelegate
-
       class Clock
         include Comparable
         attr_reader :file, :position
@@ -282,6 +256,31 @@ module ActiveRecord
 
       # ADAPTER INTERFACE DELEGATES ===========================================
 
+      def self.rescued_delegate(*methods, options)
+        to, fallback = options.values_at(:to, :fallback)
+
+        file, line = caller.first.split(':', 2)
+        line = line.to_i
+
+        methods.each do |method|
+          module_eval(<<-EOS, file, line)
+            def #{method}(*args, &block)
+              begin
+                #{to}.__send__(:#{method}, *args, &block)
+              rescue => exception
+                if connection_error?(exception)
+                  reset_master_connection
+                  #{fallback ? "#{fallback}.__send__(:#{method}, *args, *block)" : "raise MasterUnavailable"}
+                else
+                  raise
+                end
+              end
+            end
+          EOS
+        end
+      end
+      class << self; private :rescued_delegate; end
+
       # === must go to master
       rescued_delegate :adapter_name,
                        :supports_migrations?,
@@ -310,8 +309,7 @@ module ActiveRecord
                        :update_sql,
                        :delete_sql,
                        :sanitize_limit,
-                       :to => :master_connection,
-                       :on_error => :handle_master_error
+                       :to => :master_connection
       # schema statements
       rescued_delegate :native_database_types,
                        :table_exists?,
@@ -346,21 +344,19 @@ module ActiveRecord
                        :to => :master_connection
       # ActiveRecord 3.0
       rescued_delegate :visitor,
-                       :to => :master_connection,
-                       :on_error => :handle_master_error
+                       :to => :master_connection
       # no clear interface contract:
       rescued_delegate :tables,         # commented in SchemaStatements
                        :truncate_table, # monkeypatching database_cleaner gem
                        :primary_key,    # is Base#primary_key meant to be the contract?
-                       :to => :master_connection,
-                       :on_error => :handle_master_error
+                       :to => :master_connection
       # No need to be so picky about these methods
       rescued_delegate :add_limit_offset!, # DatabaseStatements
                        :add_lock!, #DatabaseStatements
                        :columns,
                        :table_alias_for,
-                       :to => :prefer_master_connection,
-                       :on_error => :handle_master_error
+                       :to => :master_connection,
+                       :fallback => :slave_connection!
 
       # ok, we might have missed more
       def method_missing(name, *args, &blk)
@@ -373,8 +369,13 @@ module ActiveRecord
             Thank you.
           })
         end
-      rescue Exception => exception
-        handle_master_error(exception, :master_connection, name.to_sym)
+      rescue => exception
+        if connection_error?(exception)
+          reset_master_connection
+          raise MasterUnavailable
+        else
+          raise
+        end
       end
 
       # === determine read connection
@@ -384,10 +385,6 @@ module ActiveRecord
                :select_value,
                :select_values,
                :to => :connection_for_read
-
-      def prefer_master_connection
-        master_available? ? master_connection : slave_connection!
-      end
 
       def connection_for_read
         open_transaction? ? master_connection : current_connection
@@ -466,16 +463,6 @@ module ActiveRecord
 
     protected
 
-      def handle_master_error(exception, to, method, *args, &block)
-        @logger.try(:warn, "Exception while executing #{method}: #{exception}")
-        if connection_error?(exception)
-          reset_master_connection
-          send(to).send(method, *args, &block)
-        else
-          raise exception
-        end
-      end
-
       def on_write
         with(master_connection) do |conn|
           yield(conn).tap do
@@ -534,7 +521,6 @@ module ActiveRecord
       end
 
       def connect_to_master
-        @logger.try(:warn, "== MS adapter == connect_to_master")
         connect(@config.fetch(:master), :master)
       rescue => exception
         connection_error?(exception) ? nil : raise
@@ -550,6 +536,8 @@ module ActiveRecord
         ]
 
         case exception
+        when ActiveRecord::MasterUnavailable
+          true
         when ActiveRecord::StatementInvalid
           connection_errors.include?(current_connection.raw_connection.errno)
         when Mysql::Error

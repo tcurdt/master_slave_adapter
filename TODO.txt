@@ -2,4 +2,8 @@ Read only mode
 --------------
 
 - Add Circuit Breaker pattern in order to not reconnect too often
-- Add fallback to connection_for_read again
+- Add better fallback to connection_for_read again
+
+- write tests
+- extract adapter specific code
+- make everything nice

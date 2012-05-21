@@ -534,15 +534,29 @@ module ActiveRecord
       end
 
       def connect_to_master
+        @logger.try(:warn, "== MS adapter == connect_to_master")
         connect(@config.fetch(:master), :master)
-      rescue StatementInvalid => exception
+      rescue => exception
         connection_error?(exception) ? nil : raise
       end
 
+      # TODO: should be extracted into adapter specific code
       def connection_error?(exception)
-        # TODO: check for error numbers
-        # TODO: should be extracted into adapter specific code
-        ActiveRecord::StatementInvalid === exception && true
+        connection_errors = [
+          Mysql::Error::CR_CONNECTION_ERROR,  # query: not connected
+          Mysql::Error::CR_CONN_HOST_ERROR,   # Can't connect to MySQL server on '%s' (%d)
+          Mysql::Error::CR_SERVER_GONE_ERROR, # MySQL server has gone away
+          Mysql::Error::CR_SERVER_LOST,       # Lost connection to MySQL server during query
+        ]
+
+        case exception
+        when ActiveRecord::StatementInvalid
+          connection_errors.include?(current_connection.raw_connection.errno)
+        when Mysql::Error
+          connection_errors.include?(exception.errno)
+        else
+          false
+        end
       end
     end
   end

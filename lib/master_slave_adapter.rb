@@ -434,10 +434,6 @@ module ActiveRecord
         @master_slave_clock
       end
 
-      def current_clock=(clock)
-        @master_slave_clock = clock
-      end
-
       def master_clock
         conn = master_connection
         # TODO: should be extracted into adapter specific code
@@ -446,11 +442,7 @@ module ActiveRecord
         end
       end
 
-      def slave_clock!
-        slave_clock(slave_connection!)
-      end
-
-      def slave_clock(conn)
+      def slave_clock(conn = slave_connection!)
         # TODO: should be extracted into adapter specific code
         if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']).tap do |c|
@@ -459,12 +451,16 @@ module ActiveRecord
         end
       end
 
+    protected
+
+      def current_clock=(clock)
+        @master_slave_clock = clock
+      end
+
       def slave_consistent?(conn, clock)
         get_last_seen_slave_clock(conn).try(:>=, clock) ||
           slave_clock(conn).try(:>=, clock)
       end
-
-    protected
 
       def on_write
         with(master_connection) do |conn|

@@ -65,7 +65,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
   before do
     unless database_setup[:disable_connection_test] == 'true'
       [ master_connection, slave_connection ].each do |c|
-        c.should_receive(:active?).exactly(2).times.and_return(true)
+        c.should_receive(:active?).once.and_return(true)
       end
     end
     ActiveRecord::Base.establish_connection(database_setup)
@@ -198,8 +198,6 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
   describe 'consistency' do
     before do
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
-
       [ master_connection, slave_connection ].each do |c|
         c.stub!(:select_value).with("SELECT 1", "test select").and_return(true)
       end
@@ -441,10 +439,6 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
   end # /with_consistency
 
   describe "transaction callbacks" do
-    before do
-      ActiveRecord::ConnectionAdapters::MasterSlaveAdapter.reset!
-    end
-
     def run_tx
       adapter_connection.
         should_receive('master_clock').

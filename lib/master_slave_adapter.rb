@@ -129,8 +129,6 @@ module ActiveRecord
         end
       end
 
-      checkout :active?
-
       def initialize(config, logger)
         super(nil, logger)
 
@@ -181,27 +179,6 @@ module ActiveRecord
 
       def on_rollback(&blk)
         on_rollback_callbacks.push blk
-      end
-
-
-      # backwards compatibility
-      class << self
-        def with_master(&blk)
-          ActiveRecord::Base.with_master(&blk)
-        end
-        def with_slave(&blk)
-          ActiveRecord::Base.with_slave(&blk)
-        end
-        def with_consistency(clock, &blk)
-          ActiveRecord::Base.with_consistency(clock, &blk)
-        end
-        def reset!
-          Thread.current[:master_slave_clock]      =
-          Thread.current[:master_slave_connection] =
-          Thread.current[:on_commit_callbacks]     =
-          Thread.current[:on_rollback_callbacks]   =
-          nil
-        end
       end
 
       # ADAPTER INTERFACE OVERRIDES ===========================================
@@ -457,11 +434,11 @@ module ActiveRecord
       end
 
       def current_clock
-        Thread.current[:master_slave_clock]
+        @master_slave_clock
       end
 
       def current_clock=(clock)
-        Thread.current[:master_slave_clock] = clock
+        @master_slave_clock = clock
       end
 
       def master_clock
@@ -523,7 +500,7 @@ module ActiveRecord
       end
 
       def connection_stack
-        Thread.current[:master_slave_connection] ||= []
+        @master_slave_connection ||= []
       end
 
       def current_connection=(conn)

@@ -139,6 +139,7 @@ module ActiveRecord
         @connections[:slaves] = @config.fetch(:slaves).map { |cfg| connect(cfg, :slave) }
 
         @disable_connection_test = @config[:disable_connection_test] == 'true'
+        @circuit = CircuitBreaker.new(logger)
 
         self.current_connection = slave_connection!
       end
@@ -391,7 +392,7 @@ module ActiveRecord
       # UTIL ==================================================================
 
       def master_connection
-        if circuit.is_tripped?
+        if circuit.tripped?
           raise MasterUnavailable
         end
 
@@ -545,65 +546,8 @@ module ActiveRecord
         end
       end
 
-      class CircuitBreaker
-        def initialize(logger = nil, failure_threshold = 5, invokation_timeout = 30)
-          @logger = logger
-          @failure_count = 0
-          @failure_threshold = failure_threshold
-          @invokation_timeout = invokation_timeout
-          @state = :closed
-        end
-
-        def open?
-          :open == @state
-        end
-
-        def half_open?
-          :half_open == @state
-        end
-
-        def closed?
-          :closed == @state
-        end
-
-        def is_tripped?
-          if open? && timeout_exceeded?
-            change_state_to :half_open
-          end
-
-          open?
-        end
-
-        def success!
-          if !closed?
-            @failure_count = 0
-            change_state_to :closed
-          end
-        end
-
-        def fail!
-          @failure_count += 1
-          if !open? && @failure_count >= @failure_threshold
-            @opened_at = Time.now
-            change_state_to :open
-          end
-        end
-
-      private
-
-        def timeout_exceeded?
-          (Time.now - @opened_at) >= @invokation_timeout
-        end
-
-        def change_state_to(state)
-          @state = state
-          @logger.try(:warn, "circuit is now #{state}")
-        end
-      end
-
-      # TODO: pass configuration values
       def circuit
-        @circuit ||= CircuitBreaker.new(@logger)
+        @circuit
       end
     end
   end

@@ -1,11 +1,10 @@
-require 'rubygems'
 require 'active_record'
 require 'rspec'
 
 ActiveRecord::Base.logger =
   Logger.new(STDOUT).tap { |l| l.level = Logger::DEBUG }
 
-$LOAD_PATH << File.expand_path(File.join( File.dirname( __FILE__ ), '..', 'lib' ))
+$: << File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
 
 require 'active_record/connection_adapters/master_slave_adapter'
 

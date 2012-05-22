@@ -109,12 +109,23 @@ module ActiveRecord
           [ @file, @position ].join('@')
         end
 
+        def infinity?
+          self == self.class.infinity
+        end
+
         def self.zero
           @zero ||= Clock.new('', 0)
         end
 
         def self.infinity
           @infinity ||= Clock.new('', Float::MAX.to_i)
+        end
+
+        # TODO: tests
+        def self.parse(string)
+          new(*string.split('@'))
+        rescue
+          nil
         end
       end
 
@@ -146,6 +157,10 @@ module ActiveRecord
 
       def with_consistency(clock)
         raise ArgumentError, "consistency cannot be nil" if clock.nil?
+        unless clock.is_a?(Clock) || (clock = Clock.parse(clock))
+          raise ArgumentError, "consistency must be a clock representation"
+        end
+
         # try random slave, else fall back to master
         slave = slave_connection!
         conn =
@@ -157,7 +172,7 @@ module ActiveRecord
 
         with(conn) { yield }
 
-        self.current_clock || clock
+        current_clock || clock
       end
 
       def on_commit(&blk)

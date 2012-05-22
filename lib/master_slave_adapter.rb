@@ -302,7 +302,6 @@ module ActiveRecord
                        :insert_sql,
                        :update_sql,
                        :delete_sql,
-                       :sanitize_limit,
                        :to => :master_connection
       # schema statements
       rescued_delegate :table_exists?,
@@ -332,8 +331,6 @@ module ActiveRecord
                        :add_order_by_for_association_limiting!,
                        :add_timestamps,
                        :remove_timestamps,
-                       :quoted_columns_for_index,
-                       :options_include_default?,
                        :to => :master_connection
       # ActiveRecord 3.0
       rescued_delegate :visitor,

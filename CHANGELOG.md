@@ -1,3 +1,13 @@
+# 1.0.0 (not released yet)
+
+* Add support for unavailable master connection
+* Fallback to slave connection if possible
+* Restrict the public interface. Removed the following methods:
+  * all class methods from ActiveRecord::ConnectionAdapters::MasterSlaveAdapter
+  * #current_connection=
+  * #current_clock=
+  * #slave_consistent?
+
 # 0.2.0 (April 2, 2012)
 
 * Add support for ActiveRecord's query cache

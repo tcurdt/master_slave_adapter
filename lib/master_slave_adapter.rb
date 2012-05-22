@@ -223,14 +223,14 @@ module ActiveRecord
         connections.each { |c| c.reset! }
       end
 
-      def cache(&block)
-        connections.inject(block) do |block, connection|
+      def cache(&blk)
+        connections.inject(blk) do |block, connection|
           lambda { connection.cache(&block) }
         end.call
       end
 
-      def uncached(&block)
-        connections.inject(block) do |block, connection|
+      def uncached(&blk)
+        connections.inject(blk) do |block, connection|
           lambda { connection.uncached(&block) }
         end.call
       end
@@ -248,7 +248,8 @@ module ActiveRecord
 
       # ADAPTER INTERFACE DELEGATES ===========================================
 
-      def self.rescued_delegate(*methods, options)
+      def self.rescued_delegate(*methods)
+        options = methods.pop
         to, fallback = options.values_at(:to, :fallback)
 
         file, line = caller.first.split(':', 2)
@@ -260,11 +261,11 @@ module ActiveRecord
               begin
                 #{to}.__send__(:#{method}, *args, &block)
               rescue MasterUnavailable
-                #{fallback ? "#{fallback}.__send__(:#{method}, *args, *block)" : "raise"}
+                #{fallback ? "#{fallback}.__send__(:#{method}, *args, &block)" : "raise"}
               rescue => exception
                 if master_connection?(#{to}) && connection_error?(exception)
                   reset_master_connection
-                  #{fallback ? "#{fallback}.__send__(:#{method}, *args, *block)" : "raise MasterUnavailable"}
+                  #{fallback ? "#{fallback}.__send__(:#{method}, *args, &block)" : "raise MasterUnavailable"}
                 else
                   raise
                 end

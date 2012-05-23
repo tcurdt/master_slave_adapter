@@ -17,25 +17,29 @@ module ActiveRecord
         Mysql::Error::CR_SERVER_LOST,       # Lost connection to MySQL server during query
       ]
 
+      # TODO: only do the actual conenction specific things here
       def master_clock
         conn = master_connection
         if status = conn.uncached { conn.select_one("SHOW MASTER STATUS") }
           Clock.new(status['File'], status['Position'])
+        else
+          Clock.infinity
         end
-        # TODO
-        # else
-        #   Clock.infinity
-        # end
+      rescue MasterUnavailable
+        Clock.zero
+      rescue
+        Clock.infinity
       end
 
-      def slave_clock(conn = slave_connection!)
+      # TODO: only do the actual conenction specific things here
+      def slave_clock(conn)
         if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
+        else
+          Clock.zero
         end
-        # TODO
-        # else
-        #   Clock.infinity
-        # end
+      rescue
+        Clock.zero
       end
 
     private

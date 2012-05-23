@@ -155,9 +155,15 @@ module ActiveRecord
       end
 
       def with_consistency(clock)
-        raise ArgumentError, "consistency cannot be nil" if clock.nil?
-        unless clock.is_a?(Clock) || (clock = Clock.parse(clock))
-          raise ArgumentError, "consistency must be a clock representation"
+        clock =
+          case clock
+          when Clock  then clock
+          when String then Clock.parse(clock)
+          when nil    then Clock.zero
+          end
+
+        if clock.nil?
+          raise ArgumentError, "consistency must be a valid value"
         end
 
         # try random slave, else fall back to master
@@ -429,7 +435,7 @@ module ActiveRecord
         raise NotImplementedError
       end
 
-      def slave_clock(conn = slave_connection!)
+      def slave_clock(conn)
         raise NotImplementedError
       end
 

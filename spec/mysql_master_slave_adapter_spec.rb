@@ -105,11 +105,14 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
     end
 
     SelectMethods.each do |method|
-      it "should raise an exception if consistency is nil" do
-        lambda do
-          ActiveRecord::Base.with_consistency(nil) do
-          end
-        end.should raise_error(ArgumentError)
+      it "should send the method '#{method}' to the slave if nil is given" do
+        slave_should_report_clock(0)
+        slave_connection.should_receive(method).with('testing').and_return(true)
+        new_clock = ActiveRecord::Base.with_consistency(nil) do
+          adapter_connection.send(method, 'testing')
+        end
+        new_clock.should be_a(Clock)
+        new_clock.should equal(zero)
       end
 
       it "should send the method '#{method}' to the slave if clock.zero is given" do
@@ -119,8 +122,8 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           adapter_connection.send(method, 'testing')
         end
-        new_clock.should be_a(zero.class)
-        new_clock.should equal(zero)
+        new_clock.should be_a(Clock)
+        new_clock.should equal(old_clock)
       end
 
       it "should send the method '#{method}' to the master if slave hasn't cought up to required clock yet" do
@@ -130,7 +133,7 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           adapter_connection.send(method, 'testing' )
         end
-        new_clock.should be_a(zero.class)
+        new_clock.should be_a(Clock)
         new_clock.should equal(old_clock)
       end
 
@@ -141,7 +144,7 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           adapter_connection.send(method, 'testing')
         end
-        new_clock.should be_a(zero.class)
+        new_clock.should be_a(Clock)
         new_clock.should equal(zero)
       end
 
@@ -157,7 +160,7 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
           adapter_connection.send('update', 'testing') # master
           adapter_connection.send(method, 'testing')   # master
         end
-        new_clock.should be_a(zero.class)
+        new_clock.should be_a(Clock)
         new_clock.should > old_clock
       end
     end

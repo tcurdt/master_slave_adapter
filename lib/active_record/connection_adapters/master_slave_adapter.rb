@@ -40,13 +40,12 @@ module ActiveRecord
       end
 
       def master_slave_connection(config)
-        config = massage(config)
-        load_adapter(config.fetch(:connection_adapter))
-        ConnectionAdapters::MasterSlaveAdapter.new(config, logger)
-      end
+        config  = massage(config)
+        name    = config.fetch(:connection_adapter)
+        adapter = "#{name.classify}MasterSlaveAdapter"
 
-      def mysql_master_slave_connection(config)
-        master_slave_connection(config)
+        load_adapter("#{name}_master_slave")
+        ConnectionAdapters.const_get(adapter).new(config, logger)
       end
 
     private
@@ -66,11 +65,11 @@ module ActiveRecord
       def load_adapter(adapter_name)
         unless respond_to?("#{adapter_name}_connection")
           begin
-            require 'rubygems'
-            gem "activerecord-#{adapter_name}-adapter"
             require "active_record/connection_adapters/#{adapter_name}_adapter"
           rescue LoadError
             begin
+              require 'rubygems'
+              gem "activerecord-#{adapter_name}-adapter"
               require "active_record/connection_adapters/#{adapter_name}_adapter"
             rescue LoadError
               raise %Q{Please install the #{adapter_name} adapter:
@@ -438,20 +437,11 @@ module ActiveRecord
       end
 
       def master_clock
-        conn = master_connection
-        # TODO: should be extracted into adapter specific code
-        if status = conn.uncached { conn.select_one("SHOW MASTER STATUS") }
-          Clock.new(status['File'], status['Position'])
-        end
+        raise NotImplementedError
       end
 
       def slave_clock(conn = slave_connection!)
-        # TODO: should be extracted into adapter specific code
-        if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
-          Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos']).tap do |c|
-            set_last_seen_slave_clock(conn, c)
-          end
-        end
+        raise NotImplementedError
       end
 
     protected
@@ -461,8 +451,14 @@ module ActiveRecord
       end
 
       def slave_consistent?(conn, clock)
-        get_last_seen_slave_clock(conn).try(:>=, clock) ||
-          slave_clock(conn).try(:>=, clock)
+        if (last_seen_clock = get_last_seen_slave_clock(conn))
+          last_seen_clock >= clock
+        elsif (slave_clk = slave_clock(conn))
+          set_last_seen_slave_clock(conn, slave_clk)
+          slave_clk >= clock
+        else
+          false
+        end
       end
 
       def on_write
@@ -528,23 +524,8 @@ module ActiveRecord
         connection_error?(exception) ? nil : raise
       end
 
-      # TODO: should be extracted into adapter specific code
       def connection_error?(exception)
-        connection_errors = [
-          Mysql::Error::CR_CONNECTION_ERROR,  # query: not connected
-          Mysql::Error::CR_CONN_HOST_ERROR,   # Can't connect to MySQL server on '%s' (%d)
-          Mysql::Error::CR_SERVER_GONE_ERROR, # MySQL server has gone away
-          Mysql::Error::CR_SERVER_LOST,       # Lost connection to MySQL server during query
-        ]
-
-        case exception
-        when ActiveRecord::StatementInvalid
-          connection_errors.include?(current_connection.raw_connection.errno)
-        when Mysql::Error
-          connection_errors.include?(exception.errno)
-        else
-          false
-        end
+        raise NotImplementedError
       end
 
       def circuit

@@ -1,3 +1,4 @@
+require 'active_record'
 require 'active_record/connection_adapters/master_slave_adapter'
 require 'active_record/connection_adapters/mysql_adapter'
 
@@ -9,7 +10,7 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
-    class MysqlMasterSlaveAdapter < MasterSlaveAdapter
+    class MysqlMasterSlaveAdapter < MasterSlaveAdapter::Base
       CONNECTION_ERRORS = [
         Mysql::Error::CR_CONNECTION_ERROR,  # query: not connected
         Mysql::Error::CR_CONN_HOST_ERROR,   # Can't connect to MySQL server on '%s' (%d)

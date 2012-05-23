@@ -89,12 +89,6 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
   end
 
   describe 'common configuration' do
-    before do
-      [ master_connection, slave_connection ].each do |c|
-        c.stub!( :select_value ).with( "SELECT 1", "test select" ).and_return( true )
-      end
-    end
-
     it "should call 'columns' on master" do
       master_connection.should_receive(:columns)
       adapter_connection.columns
@@ -166,43 +160,36 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     end
 
     it 'should have a slave connection' do
-      master_connection.stub!( :open_transactions ).and_return( 0 )
       adapter_connection.slave_connection!.should == slave_connection
     end
   end
 
   describe "connection testing" do
+    before do
+      master_connection.unstub(:active?)
+      slave_connection.unstub(:active?)
+    end
+
     context "disabled" do
       let(:database_setup) do
         default_database_setup.merge(:disable_connection_test => 'true')
       end
 
-      context "on master" do
-        before { master_connection.unstub(:active?) }
+      it "should not perform the testing" do
+        master_connection.should_not_receive(:active?)
+        slave_connection.should_not_receive(:active?)
 
-        SchemaStatements.each do |method|
-          it "should not perform the testing when #{method} is called" do
-            master_connection.tap do |c|
-              c.should_not_receive(:active?)
-              c.should_receive(method).with('testing').and_return(true)
-            end
-            adapter_connection.send(method, 'testing')
-          end
-        end
+        adapter_connection.active?.should == true
       end
+    end
 
-      context "on slave" do
-        before { slave_connection.unstub(:active?) }
+    context "enabled" do
+      it "should perform the testing" do
+        # twice == one during connection + one on explicit #active? call
+        master_connection.should_receive(:active?).twice.and_return(true)
+        slave_connection.should_receive(:active?).twice.and_return(true)
 
-        SelectMethods.each do |method|
-          it "should not perform the testing when #{method} is called" do
-            slave_connection.tap do |c|
-              c.should_not_receive(:active?)
-              c.should_receive(method).with('testing').and_return(true)
-            end
-            adapter_connection.send(method, 'testing')
-          end
-        end
+        adapter_connection.active?.should == true
       end
     end
   end

@@ -251,7 +251,7 @@ module ActiveRecord
 
       def self.rescued_delegate(*methods)
         options = methods.pop
-        to, fallback = options.values_at(:to, :fallback)
+        to = options[:to]
 
         file, line = caller.first.split(':', 2)
         line = line.to_i
@@ -261,12 +261,10 @@ module ActiveRecord
             def #{method}(*args, &block)
               begin
                 #{to}.__send__(:#{method}, *args, &block)
-              rescue MasterUnavailable
-                #{fallback ? "#{fallback}.__send__(:#{method}, *args, &block)" : "raise"}
               rescue => exception
                 if master_connection?(#{to}) && connection_error?(exception)
                   reset_master_connection
-                  #{fallback ? "#{fallback}.__send__(:#{method}, *args, &block)" : "raise MasterUnavailable"}
+                  raise MasterUnavailable
                 else
                   raise
                 end
@@ -347,8 +345,7 @@ module ActiveRecord
                        :add_lock!, #DatabaseStatements
                        :columns,
                        :table_alias_for,
-                       :to => :master_connection,
-                       :fallback => :slave_connection!
+                       :to => :prefer_master_connection
 
       # ok, we might have missed more
       def method_missing(name, *args, &blk)
@@ -384,10 +381,10 @@ module ActiveRecord
       private :connection_for_read
 
       # === doesn't really matter, but must be handled by underlying adapter
-      delegate *(ActiveRecord::ConnectionAdapters::Quoting.instance_methods + [{
-               :to => :current_connection }])
+      rescued_delegate *(ActiveRecord::ConnectionAdapters::Quoting.instance_methods + [{
+                       :to => :current_connection }])
       # issue #4: current_database is not supported by all adapters, though
-      delegate :current_database, :to => :current_connection
+      rescued_delegate :current_database, :to => :current_connection
 
       # UTIL ==================================================================
 
@@ -406,16 +403,8 @@ module ActiveRecord
         end
       end
 
-      def master_connection?(connection)
-        @connections[:master] == connection
-      end
-
       def master_available?
         !@connections[:master].nil?
-      end
-
-      def reset_master_connection
-        @connections[:master] = nil
       end
 
       # Returns a random slave connection
@@ -425,7 +414,7 @@ module ActiveRecord
       end
 
       def connections
-        @connections.values.inject([]) { |m,c| m << c }.flatten.compact
+        @connections.values.flatten.compact
       end
 
       def current_connection
@@ -445,6 +434,18 @@ module ActiveRecord
       end
 
     protected
+
+      def prefer_master_connection
+        master_available? ? master_connection : slave_connection!
+      end
+
+      def master_connection?(connection)
+        @connections[:master] == connection
+      end
+
+      def reset_master_connection
+        @connections[:master] = nil
+      end
 
       def current_clock=(clock)
         @master_slave_clock = clock

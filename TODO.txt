@@ -1,8 +1,18 @@
 Read only mode
 --------------
 
-- Add better fallback to connection_for_read
+- Write tests
+  - Clock.parse
+  - connection_error (integration test)
+  - integration tests
+  - with_consistency accepts string clock
+  - raise MasterUnavailable in all cases
+  - connection stack usage
 
-- write tests
-- extract adapter specific code
-- make everything nice
+- Check
+  - thread safety
+  - AR reconnect behavior / connection check
+  - replication in other databases
+
+- restructure MasterSlaveAdapter with proper namespaces
+- make clock private

@@ -1,4 +1,5 @@
 require 'active_record'
+require 'active_record/connection_adapters/abstract/circuit_breaker'
 
 module ActiveRecord
   class MasterUnavailable < ConnectionNotEstablished; end

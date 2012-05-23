@@ -1,9 +1,9 @@
 $: << File.expand_path(File.join(File.dirname( __FILE__ ), '..', 'lib'))
 
 require 'rspec'
-require 'active_record/connection_adapters/master_slave_adapter/circuit_breaker'
+require 'active_record/connection_adapters/abstract/circuit_breaker'
 
-describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::CircuitBreaker do
+describe ActiveRecord::ConnectionAdapters::CircuitBreaker do
   let(:logger) { nil }
   let(:failure_threshold) { 5 }
   let(:timeout) { 10 }

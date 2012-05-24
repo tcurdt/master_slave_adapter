@@ -1,5 +1,6 @@
 require 'active_record'
 require 'active_record/connection_adapters/master_slave_adapter'
+require 'active_record/connection_adapters/master_slave_adapter/clock'
 require 'active_record/connection_adapters/mysql_adapter'
 
 module ActiveRecord
@@ -17,6 +18,17 @@ module ActiveRecord
         Mysql::Error::CR_SERVER_GONE_ERROR, # MySQL server has gone away
         Mysql::Error::CR_SERVER_LOST,       # Lost connection to MySQL server during query
       ]
+
+      def with_consistency(clock)
+        clock =
+          case clock
+          when Clock  then clock
+          when String then Clock.parse(clock)
+          when nil    then Clock.zero
+          end
+
+        super(clock)
+      end
 
       # TODO: only do the actual conenction specific things here
       def master_clock

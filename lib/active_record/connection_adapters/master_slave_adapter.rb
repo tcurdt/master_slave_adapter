@@ -92,43 +92,6 @@ module ActiveRecord
     end
 
     module MasterSlaveAdapter
-      class Clock
-        include Comparable
-        attr_reader :file, :position
-
-        def initialize(file, position)
-          raise ArgumentError, "file and postion may not be nil" if file.nil? || position.nil?
-          @file, @position = file, position.to_i
-        end
-
-        def <=>(other)
-          @file == other.file ? @position <=> other.position : @file <=> other.file
-        end
-
-        def to_s
-          [ @file, @position ].join('@')
-        end
-
-        def infinity?
-          self == self.class.infinity
-        end
-
-        def self.zero
-          @zero ||= Clock.new('', 0)
-        end
-
-        def self.infinity
-          @infinity ||= Clock.new('', Float::MAX.to_i)
-        end
-
-        # TODO: tests
-        def self.parse(string)
-          new(*string.split('@'))
-        rescue
-          nil
-        end
-      end
-
       class Base < AbstractAdapter
         def initialize(config, logger)
           super(nil, logger)
@@ -156,15 +119,8 @@ module ActiveRecord
         end
 
         def with_consistency(clock)
-          clock =
-            case clock
-            when Clock  then clock
-            when String then Clock.parse(clock)
-            when nil    then Clock.zero
-            end
-
           if clock.nil?
-            raise ArgumentError, "consistency must be a valid value"
+            raise ArgumentError, "consistency must be a valid comparable value"
           end
 
           # try random slave, else fall back to master

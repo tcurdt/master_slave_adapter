@@ -78,7 +78,6 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
 
   SchemaStatements = ActiveRecord::ConnectionAdapters::SchemaStatements.public_instance_methods.map(&:to_sym)
   SelectMethods = [ :select_all, :select_one, :select_rows, :select_value, :select_values ]
-  Clock = ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock
 
   before do
     ActiveRecord::Base.establish_connection(database_setup)
@@ -204,7 +203,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
     def run_tx
       adapter_connection.
         should_receive('master_clock').
-        and_return(Clock.new('', 1))
+        and_return(1)
       %w(begin_db_transaction
          commit_db_transaction
          increment_open_transactions

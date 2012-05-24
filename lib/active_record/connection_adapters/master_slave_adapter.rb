@@ -41,11 +41,11 @@ module ActiveRecord
 
       def master_slave_connection(config)
         config  = massage(config)
-        name    = config.fetch(:connection_adapter)
-        adapter = "#{name.classify}MasterSlaveAdapter"
+        adapter = config.fetch(:connection_adapter)
+        name    = "#{adapter}_master_slave"
 
-        load_adapter("#{name}_master_slave")
-        ConnectionAdapters.const_get(adapter).new(config, logger)
+        load_adapter(name)
+        send(:"#{name}_connection", config)
       end
 
     private

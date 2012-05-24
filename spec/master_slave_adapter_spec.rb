@@ -14,7 +14,7 @@ module ActiveRecord
     end
 
     def self.test_master_slave_connection(config)
-      TestMasterSlaveAdapter.new(config, logger)
+      ConnectionAdapters::TestMasterSlaveAdapter.new(config, logger)
     end
   end
 

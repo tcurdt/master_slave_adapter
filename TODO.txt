@@ -2,10 +2,8 @@ Read only mode
 --------------
 
 - Write tests
-  - Clock.parse
   - connection_error (integration test)
   - integration tests
-  - with_consistency accepts string clock
   - raise MasterUnavailable in all cases
   - connection stack usage
 
@@ -14,5 +12,3 @@ Read only mode
   - AR reconnect behavior / connection check
   - replication in other databases
 
-- restructure MasterSlaveAdapter with proper namespaces
-- make clock private

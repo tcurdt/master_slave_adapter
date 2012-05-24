@@ -30,7 +30,6 @@ module ActiveRecord
           @infinity ||= Clock.new('', Float::MAX.to_i)
         end
 
-        # TODO: tests
         def self.parse(string)
           new(*string.split('@'))
         rescue

@@ -316,5 +316,14 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
         adapter_connection.send('select_all', 'testing') # master
       end
     end
+
+    it "should accept clock as string" do
+      slave_should_report_clock(0)
+      slave_connection.should_receive(:select_all).with('testing')
+
+      ActiveRecord::Base.with_consistency("@0") do
+        adapter_connection.send(:select_all, 'testing')
+      end
+    end
   end # /with_consistency
 end

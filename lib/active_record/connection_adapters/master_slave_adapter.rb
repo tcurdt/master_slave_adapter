@@ -31,14 +31,6 @@ module ActiveRecord
         end
       end
 
-      def on_commit(&blk)
-        connection.on_commit(&blk) if connection.respond_to? :on_commit
-      end
-
-      def on_rollback(&blk)
-        connection.on_rollback(&blk) if connection.respond_to? :on_rollback
-      end
-
       def master_slave_connection(config)
         config  = massage(config)
         adapter = config.fetch(:connection_adapter)
@@ -464,11 +456,11 @@ module ActiveRecord
         end
 
         def on_commit_callbacks
-          Thread.current[:on_commit_callbacks] ||= []
+          @on_commit_callbacks ||= []
         end
 
         def on_rollback_callbacks
-          Thread.current[:on_rollback_callbacks] ||= []
+          @on_rollback_callbacks ||= []
         end
 
         def get_last_seen_slave_clock(conn)

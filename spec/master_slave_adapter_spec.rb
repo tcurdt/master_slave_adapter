@@ -315,4 +315,44 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       end
     end
   end
+
+  describe "connection stack" do
+    it "should start with the slave connection on top" do
+      adapter_connection.current_connection.should == slave_connection
+    end
+
+    it "should keep the current connection on top" do
+      ActiveRecord::Base.with_master do
+        adapter_connection.current_connection.should == master_connection
+        ActiveRecord::Base.with_slave do
+          adapter_connection.current_connection.should == slave_connection
+          ActiveRecord::Base.with_master do
+            adapter_connection.current_connection.should == master_connection
+          end
+          adapter_connection.current_connection.should == slave_connection
+        end
+        adapter_connection.current_connection.should == master_connection
+      end
+      adapter_connection.current_connection.should == slave_connection
+    end
+
+    it "should continue to use master connection after a write" do
+      master_connection.should_receive(:execute).with("INSERT 42")
+
+      ActiveRecord::Base.with_slave do
+        adapter_connection.current_connection.should == slave_connection
+        ActiveRecord::Base.with_master do
+          adapter_connection.current_connection.should == master_connection
+          ActiveRecord::Base.with_slave do
+            adapter_connection.current_connection.should == slave_connection
+            adapter_connection.execute("INSERT 42")
+            adapter_connection.current_connection.should == master_connection
+          end
+          adapter_connection.current_connection.should == master_connection
+        end
+        adapter_connection.current_connection.should == master_connection
+      end
+      adapter_connection.current_connection.should == master_connection
+    end
+  end
 end

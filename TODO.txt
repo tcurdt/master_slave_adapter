@@ -5,7 +5,6 @@ Read only mode
   - connection_error (integration test)
   - integration tests
   - raise MasterUnavailable in all cases
-  - connection stack usage
 
 - Check
   - thread safety

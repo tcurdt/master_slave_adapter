@@ -9,6 +9,7 @@
   * #slave_consistent?
   * ActiveRecord::Base.on_commit and ActiveRecord::Base.on_rollback
 * Fix 1.8.7 compliance
+* Fix bug which led to infinitely connection stack growth
 
 # 0.2.0 (April 2, 2012)
 

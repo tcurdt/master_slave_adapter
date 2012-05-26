@@ -1,16 +1,6 @@
 $: << File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
 
 require 'rspec'
-
-class Mysql
-  class Error
-    CR_CONNECTION_ERROR   = 1
-    CR_CONN_HOST_ERROR    = 2
-    CR_SERVER_GONE_ERROR  = 4
-    CR_SERVER_LOST        = 8
-  end
-end
-
 require 'active_record/connection_adapters/mysql_master_slave_adapter'
 
 ActiveRecord::Base.logger =

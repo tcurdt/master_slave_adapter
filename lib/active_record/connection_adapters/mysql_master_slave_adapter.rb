@@ -1,7 +1,7 @@
-require 'active_record'
 require 'active_record/connection_adapters/master_slave_adapter'
 require 'active_record/connection_adapters/master_slave_adapter/clock'
 require 'active_record/connection_adapters/mysql_adapter'
+require 'mysql'
 
 module ActiveRecord
   class Base

@@ -11,7 +11,9 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
-    class MysqlMasterSlaveAdapter < MasterSlaveAdapter::Base
+    class MysqlMasterSlaveAdapter < AbstractAdapter
+      include MasterSlaveAdapter
+
       CONNECTION_ERRORS = [
         Mysql::Error::CR_CONNECTION_ERROR,  # query: not connected
         Mysql::Error::CR_CONN_HOST_ERROR,   # Can't connect to MySQL server on '%s' (%d)
@@ -30,7 +32,6 @@ module ActiveRecord
         super(clock)
       end
 
-      # TODO: only do the actual conenction specific things here
       def master_clock
         conn = master_connection
         if status = conn.uncached { conn.select_one("SHOW MASTER STATUS") }
@@ -44,7 +45,6 @@ module ActiveRecord
         Clock.infinity
       end
 
-      # TODO: only do the actual conenction specific things here
       def slave_clock(conn)
         if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])

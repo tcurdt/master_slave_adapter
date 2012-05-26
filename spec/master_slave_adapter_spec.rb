@@ -19,7 +19,9 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
-    class TestMasterSlaveAdapter < MasterSlaveAdapter::Base
+    class TestMasterSlaveAdapter < AbstractAdapter
+      include MasterSlaveAdapter
+
       def master_clock
       end
 

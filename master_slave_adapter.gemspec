@@ -20,8 +20,8 @@ Gem::Specification.new do |s|
   s.required_ruby_version     = '>= 1.8.7'
   s.required_rubygems_version = '>= 1.3.7'
 
-  s.add_development_dependency 'rspec'
-  s.add_development_dependency 'rake'
+  s.add_dependency 'activerecord', ['>= 2.3.9', '<= 4.0']
 
-  s.add_dependency 'activerecord', '~> 2.3.9'
+  s.add_development_dependency 'rake'
+  s.add_development_dependency 'rspec'
 end

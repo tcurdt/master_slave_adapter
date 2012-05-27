@@ -1,7 +1,6 @@
 # 1.0.0 (not released yet)
 
 * Add support for unavailable master connection
-* Fallback to slave connection if possible
 * Restrict the public interface. Removed the following methods:
   * all class methods from ActiveRecord::ConnectionAdapters::MasterSlaveAdapter
   * #current_connection=
@@ -10,6 +9,7 @@
   * ActiveRecord::Base.on_commit and ActiveRecord::Base.on_rollback
 * Fix 1.8.7 compliance
 * Fix bug which led to infinitely connection stack growth
+* Add ActiveRecord 3.x compatibility
 
 # 0.2.0 (April 2, 2012)
 

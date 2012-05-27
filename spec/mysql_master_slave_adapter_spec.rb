@@ -78,20 +78,31 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
       Clock.new('', pos)
     end
 
-    def slave_should_report_clock(pos)
+    def supports_prepared_statements?
+      ActiveRecord::ConnectionAdapters::MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
+    end
+
+    def select_method
+      supports_prepared_statements? ? :exec_without_stmt : :select_one
+    end
+
+    def should_report_clock(pos, connection, log_file, log_pos, sql)
       pos = Array(pos)
-      values = pos.map { |p| { 'Relay_Master_Log_File' => '', 'Exec_Master_Log_Pos' => p } }
-      slave_connection.
-        should_receive('select_one').exactly(pos.length).with('SHOW SLAVE STATUS').
+      values = pos.map { |p| { log_file => '', log_pos => p } }
+      values.map! { |result| [ result ] } if supports_prepared_statements?
+
+      connection.
+        should_receive(select_method).exactly(pos.length).times.
+        with(sql).
         and_return(*values)
     end
 
+    def slave_should_report_clock(pos)
+      should_report_clock(pos, slave_connection, 'Relay_Master_Log_File', 'Exec_Master_Log_Pos', 'SHOW SLAVE STATUS')
+    end
+
     def master_should_report_clock(pos)
-      pos = Array(pos)
-      values = pos.map { |p| { 'File' => '', 'Position' => p } }
-      master_connection.
-        should_receive('select_one').exactly(pos.length).with('SHOW MASTER STATUS').
-        and_return(*values)
+      should_report_clock(pos, master_connection, 'File', 'Position', 'SHOW MASTER STATUS')
     end
 
     SelectMethods.each do |method|
@@ -142,12 +153,12 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
         slave_should_report_clock(0)
         master_should_report_clock(2)
         slave_connection.should_receive(method).with('testing').and_return(true)
-        master_connection.should_receive('update').with('testing').and_return(true)
+        master_connection.should_receive(:update).with('testing').and_return(true)
         master_connection.should_receive(method).with('testing').and_return(true)
         old_clock = zero
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
           adapter_connection.send(method, 'testing')   # slave
-          adapter_connection.send('update', 'testing') # master
+          adapter_connection.send(:update, 'testing') # master
           adapter_connection.send(method, 'testing')   # master
         end
         new_clock.should be_a(Clock)
@@ -160,14 +171,14 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
       master_should_report_clock([0, 1, 1])
 
       slave_connection.
-        should_receive('select_all').exactly(1).times.with('testing').
+        should_receive(:select_all).exactly(1).times.with('testing').
         and_return(true)
 
       master_connection.
-        should_receive('update').exactly(3).times.with('testing').
+        should_receive(:update).exactly(3).times.with('testing').
         and_return(true)
       master_connection.
-        should_receive('select_all').exactly(5).times.with('testing').
+        should_receive(:select_all).exactly(5).times.with('testing').
         and_return(true)
       %w(begin_db_transaction
          commit_db_transaction
@@ -194,19 +205,19 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
 
       old_clock = zero
       new_clock = ActiveRecord::Base.with_consistency(old_clock) do
-        adapter_connection.send('select_all', 'testing') # slave  s=0 m=0
-        adapter_connection.send('update', 'testing')     # master s=0 m=1
-        adapter_connection.send('select_all', 'testing') # master s=0 m=1
+        adapter_connection.send(:select_all, 'testing') # slave  s=0 m=0
+        adapter_connection.send(:update, 'testing')     # master s=0 m=1
+        adapter_connection.send(:select_all, 'testing') # master s=0 m=1
 
         ActiveRecord::Base.transaction do
-          adapter_connection.send('select_all', 'testing') # master s=0 m=1
-          adapter_connection.send('update', 'testing')     # master s=0 m=1
-          adapter_connection.send('select_all', 'testing') # master s=0 m=1
+          adapter_connection.send(:select_all, 'testing') # master s=0 m=1
+          adapter_connection.send(:update, 'testing')     # master s=0 m=1
+          adapter_connection.send(:select_all, 'testing') # master s=0 m=1
         end
 
-        adapter_connection.send('select_all', 'testing') # master s=0 m=2
-        adapter_connection.send('update', 'testing')     # master s=0 m=3
-        adapter_connection.send('select_all', 'testing') # master s=0 m=3
+        adapter_connection.send(:select_all, 'testing') # master s=0 m=2
+        adapter_connection.send(:update, 'testing')     # master s=0 m=3
+        adapter_connection.send(:select_all, 'testing') # master s=0 m=3
       end
 
       new_clock.should > old_clock
@@ -214,18 +225,18 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
 
     context "with nested with_consistency" do
       it "should return the same clock if not writing and no lag" do
-        slave_should_report_clock(0) # note: tests memoizing slave clock
+        slave_should_report_clock(0)
         slave_connection.
-          should_receive('select_one').exactly(3).times.with('testing').
+          should_receive(:select_one).exactly(3).times.with('testing').
           and_return(true)
 
         old_clock = zero
         new_clock = ActiveRecord::Base.with_consistency(old_clock) do
-          adapter_connection.send('select_one', 'testing')
+          adapter_connection.send(:select_one, 'testing')
           ActiveRecord::Base.with_consistency(old_clock) do
-            adapter_connection.send('select_one', 'testing')
+            adapter_connection.send(:select_one, 'testing')
           end
-          adapter_connection.send('select_one', 'testing')
+          adapter_connection.send(:select_one, 'testing')
         end
         new_clock.should equal(old_clock)
       end
@@ -235,20 +246,20 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
           should_receive('slave_consistent?').exactly(2).times.
           and_return(true, false)
         slave_connection.
-          should_receive('select_all').exactly(2).times.with('testing').
+          should_receive(:select_all).exactly(2).times.with('testing').
           and_return(true)
         master_connection.
-          should_receive('select_all').exactly(1).times.with('testing').
+          should_receive(:select_all).exactly(1).times.with('testing').
           and_return(true)
 
         start_clock = zero
         inner_clock = zero
         outer_clock = ActiveRecord::Base.with_consistency(start_clock) do
-          adapter_connection.send('select_all', 'testing') # slave
+          adapter_connection.send(:select_all, 'testing') # slave
           inner_clock = ActiveRecord::Base.with_consistency(master_position(1)) do
-            adapter_connection.send('select_all', 'testing') # master
+            adapter_connection.send(:select_all, 'testing') # master
           end
-          adapter_connection.send('select_all', 'testing') # slave
+          adapter_connection.send(:select_all, 'testing') # slave
         end
 
         start_clock.should equal(outer_clock)
@@ -258,52 +269,52 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
 
     it "should do the right thing when nested inside with_master" do
       slave_should_report_clock(0)
-      slave_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
-      master_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
+      slave_connection.should_receive(:select_all).exactly(1).times.with('testing').and_return(true)
+      master_connection.should_receive(:select_all).exactly(2).times.with('testing').and_return(true)
       ActiveRecord::Base.with_master do
-        adapter_connection.send('select_all', 'testing') # master
+        adapter_connection.send(:select_all, 'testing') # master
         ActiveRecord::Base.with_consistency(zero) do
-          adapter_connection.send('select_all', 'testing') # slave
+          adapter_connection.send(:select_all, 'testing') # slave
         end
-        adapter_connection.send('select_all', 'testing') # master
+        adapter_connection.send(:select_all, 'testing') # master
       end
     end
 
     it "should do the right thing when nested inside with_slave" do
       slave_should_report_clock(0)
-      slave_connection.should_receive('select_all').exactly(3).times.with('testing').and_return(true)
+      slave_connection.should_receive(:select_all).exactly(3).times.with('testing').and_return(true)
       ActiveRecord::Base.with_slave do
-        adapter_connection.send('select_all', 'testing') # slave
+        adapter_connection.send(:select_all, 'testing') # slave
         ActiveRecord::Base.with_consistency(zero) do
-          adapter_connection.send('select_all', 'testing') # slave
+          adapter_connection.send(:select_all, 'testing') # slave
         end
-        adapter_connection.send('select_all', 'testing') # slave
+        adapter_connection.send(:select_all, 'testing') # slave
       end
     end
 
     it "should do the right thing when wrapping with_master" do
       slave_should_report_clock(0)
-      slave_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
-      master_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
+      slave_connection.should_receive(:select_all).exactly(2).times.with('testing').and_return(true)
+      master_connection.should_receive(:select_all).exactly(1).times.with('testing').and_return(true)
       ActiveRecord::Base.with_consistency(zero) do
-        adapter_connection.send('select_all', 'testing') # slave
+        adapter_connection.send(:select_all, 'testing') # slave
         ActiveRecord::Base.with_master do
-          adapter_connection.send('select_all', 'testing') # master
+          adapter_connection.send(:select_all, 'testing') # master
         end
-        adapter_connection.send('select_all', 'testing') # slave
+        adapter_connection.send(:select_all, 'testing') # slave
       end
     end
 
     it "should do the right thing when wrapping with_slave" do
       slave_should_report_clock(0)
-      slave_connection.should_receive('select_all').exactly(1).times.with('testing').and_return(true)
-      master_connection.should_receive('select_all').exactly(2).times.with('testing').and_return(true)
+      slave_connection.should_receive(:select_all).exactly(1).times.with('testing').and_return(true)
+      master_connection.should_receive(:select_all).exactly(2).times.with('testing').and_return(true)
       ActiveRecord::Base.with_consistency(master_position(1)) do
-        adapter_connection.send('select_all', 'testing') # master
+        adapter_connection.send(:select_all, 'testing') # master
         ActiveRecord::Base.with_slave do
-          adapter_connection.send('select_all', 'testing') # slave
+          adapter_connection.send(:select_all, 'testing') # slave
         end
-        adapter_connection.send('select_all', 'testing') # master
+        adapter_connection.send(:select_all, 'testing') # master
       end
     end
 

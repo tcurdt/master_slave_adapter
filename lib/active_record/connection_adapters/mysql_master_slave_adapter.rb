@@ -34,24 +34,24 @@ module ActiveRecord
 
       def master_clock
         conn = master_connection
-        if status = conn.uncached { conn.select_one("SHOW MASTER STATUS") }
+        if status = conn.uncached { select_hash(conn, "SHOW MASTER STATUS") }
           Clock.new(status['File'], status['Position'])
         else
           Clock.infinity
         end
       rescue MasterUnavailable
         Clock.zero
-      rescue
+      rescue ActiveRecordError
         Clock.infinity
       end
 
       def slave_clock(conn)
-        if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
+        if status = conn.uncached { select_hash(conn, "SHOW SLAVE STATUS") }
           Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
         else
           Clock.zero
         end
-      rescue
+      rescue ActiveRecordError
         Clock.zero
       end
 
@@ -65,6 +65,19 @@ module ActiveRecord
           CONNECTION_ERRORS.include?(exception.errno)
         else
           false
+        end
+      end
+
+      if ActiveRecord::ConnectionAdapters::MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
+        # The MysqlAdapter in ActiveRecord > v3.1 uses prepared statements which
+        # don't return any results for queries like "SHOW MASTER/SLAVE STATUS",
+        # so we have to use normal queries here.
+        def select_hash(conn, sql)
+          conn.exec_without_stmt(sql).first
+        end
+      else
+        def select_hash(conn, sql)
+          conn.select_one(sql)
         end
       end
     end

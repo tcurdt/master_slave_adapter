@@ -1,4 +1,5 @@
 require 'active_record'
+require 'active_record/connection_adapters/abstract_adapter'
 require 'active_record/connection_adapters/master_slave_adapter/circuit_breaker'
 
 module ActiveRecord
@@ -75,11 +76,23 @@ module ActiveRecord
 
   module ConnectionAdapters
     class AbstractAdapter
-      alias_method :orig_log_info, :log_info
-      def log_info(sql, name, ms)
-        connection_name =
-          [ @config[:name], @config[:host], @config[:port] ].compact.join(":")
-        orig_log_info sql, "[#{connection_name}] #{name || 'SQL'}", ms
+      if instance_methods.map(&:to_sym).include?(:log_info)
+        # ActiveRecord v2.x
+        alias_method :orig_log_info, :log_info
+        def log_info(sql, name, ms)
+          orig_log_info(sql, "[#{connection_info}] #{name || 'SQL'}", ms)
+        end
+      else
+        # ActiveRecord v3.x
+        alias_method :orig_log, :log
+        def log(sql, name = 'SQL', *args, &block)
+          orig_log(sql, "[#{connection_info}] #{name}", *args, &block)
+        end
+      end
+
+    private
+      def connection_info
+        @connection_info ||= @config.values_at(:name, :host, :port).compact.join(':')
       end
     end
 
@@ -259,6 +272,8 @@ module ActiveRecord
                        :to => :master_connection
       # schema statements
       rescued_delegate :table_exists?,
+                       :column_exists?,
+                       :index_name_exists?,
                        :create_table,
                        :change_table,
                        :rename_table,

@@ -35,11 +35,11 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
     server = server_id(host)
     query  = "SELECT @@Server_id as Value"
 
-    connection.select_all(query).first["Value"].should == server
-    connection.select_one(query)["Value"].should == server
+    connection.select_all(query).first["Value"].to_s.should == server
+    connection.select_one(query)["Value"].to_s.should == server
     connection.select_rows(query).first.first.should == server
-    connection.select_value(query).should == server
-    connection.select_values(query).first.should == server
+    connection.select_value(query).to_s.should == server
+    connection.select_values(query).first.to_s.should == server
   end
 
   before(:all) do

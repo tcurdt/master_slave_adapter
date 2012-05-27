@@ -1,0 +1,5 @@
+source :rubygems
+
+gem "mysql", "~> 2.8.1"
+gem "activerecord", "~> 3.2.3"
+gemspec :path=>"../../"

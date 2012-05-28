@@ -15,6 +15,7 @@ end
 
 def mysql2_adapter_available?
   require 'active_record/connection_adapters/mysql2_adapter'
+  true
 rescue LoadError
   false
 rescue

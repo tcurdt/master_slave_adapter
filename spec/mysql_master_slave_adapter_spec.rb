@@ -1,6 +1,7 @@
 $: << File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
 
 require 'rspec'
+require 'logger'
 require 'active_record/connection_adapters/mysql_master_slave_adapter'
 
 ActiveRecord::Base.logger =

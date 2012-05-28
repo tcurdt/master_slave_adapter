@@ -70,15 +70,16 @@ module MysqlHelper
 
   def setup
     [:master, :slave].each do |name|
-      path = location(name)
+      path        = location(name)
       config_path = File.join(path, "my.cnf")
-      data_path = File.join(path, "data")
+      data_path   = File.join(path, "data")
+      base_dir    = File.dirname(File.dirname(`which mysql_install_db`))
 
       FileUtils.rm_rf(path)
       FileUtils.mkdir_p(path)
       File.open(config_path, "w") { |file| file << config(name) }
 
-      `mysql_install_db --basedir=/usr/local --datadir="#{data_path}" --user=\$USER`
+      `mysql_install_db --basedir='#{base_dir}' --datadir='#{data_path}'`
     end
   end
 
@@ -124,7 +125,15 @@ private
 
   def stop(name)
     pipe = $pipes[name]
-    Process.kill("TERM", pipe.pid)
+    Process.kill("KILL", pipe.pid)
+    Process.wait(pipe.pid, Process::WNOHANG)
+
+    # Ruby 1.8.7 doesn't support IO.popen([cmd, [arg, ]]) syntax, and passing
+    # the command line as string wraps the process in a shell. The IO#pid method
+    # will then only return the pid of the wrapping shell process, which is not
+    # what we need here.
+    mysqld_pid = `ps a | grep 'mysqld.*#{location(name)}/my.cnf' | grep -v grep | awk '{print $1}'`.to_i
+    Process.kill("KILL", mysqld_pid) unless mysqld_pid.zero?
   ensure
     pipe.close unless pipe.closed?
   end
@@ -135,10 +144,10 @@ private
 
   def wait_for_database_boot(host)
     Timeout.timeout(5) do
-      until started?(host); end
+      until started?(host); sleep(0.1); end
     end
   rescue Timeout::Error
-    raise "Couldn't connect to MySQL"
+    raise "Couldn't connect to MySQL in time"
   end
 
   def location(name)
@@ -153,13 +162,12 @@ private
 pid-file = #{path}/mysqld.pid
 socket = #{path}/mysqld.sock
 port = #{port(name)}
-log_output = FILE
 log-error = #{path}/error.log
 datadir = #{path}/data
 log-bin = #{name}-bin
 log-bin-index = #{name}-bin.index
 server-id = #{server_id(name)}
-lower_case_table_names = 2
+lower_case_table_names = 1
     EOS
   end
 end

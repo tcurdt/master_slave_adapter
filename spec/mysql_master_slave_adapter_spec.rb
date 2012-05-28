@@ -59,7 +59,7 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
     ActiveRecord::Base.connection
   end
 
-  SelectMethods = [ :select_all, :select_one, :select_rows, :select_value, :select_values ]
+  SelectMethods = [ :select_all, :select_one, :select_rows, :select_value, :select_values ] unless defined?(SelectMethods)
   Clock = ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock
 
   before do

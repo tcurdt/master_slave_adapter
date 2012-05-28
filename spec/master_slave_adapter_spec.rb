@@ -80,7 +80,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
   end
 
   SchemaStatements = ActiveRecord::ConnectionAdapters::SchemaStatements.public_instance_methods.map(&:to_sym)
-  SelectMethods = [ :select_all, :select_one, :select_rows, :select_value, :select_values ]
+  SelectMethods = [ :select_all, :select_one, :select_rows, :select_value, :select_values ] unless defined?(SelectMethods)
 
   before do
     ActiveRecord::Base.establish_connection(database_setup)

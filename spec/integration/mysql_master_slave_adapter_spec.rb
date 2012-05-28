@@ -1,7 +1,6 @@
 $: << File.expand_path(File.join(File.dirname(__FILE__), '..', '..', 'lib'))
 
 require 'rspec'
-require 'mysql'
 require 'timeout'
 require 'active_record/connection_adapters/mysql_master_slave_adapter'
 
@@ -135,7 +134,7 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
     context "when asked for master" do
       it "fails" do
         expect do
-          ActiveRecord::Base.with_master { read }
+          ActiveRecord::Base.with_master { should_read_from :master }
         end.to raise_error(ActiveRecord::MasterUnavailable)
       end
     end

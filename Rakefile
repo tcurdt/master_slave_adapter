@@ -3,13 +3,35 @@ require 'rspec/core/rake_task'
 
 Bundler::GemHelper.install_tasks
 
+class MasterSlaveAdapterRSpecTask < RSpec::Core::RakeTask
+  attr_accessor :exclude
+
+private
+
+  def files_to_run
+    FileList[ pattern ].exclude(exclude)
+  end
+end
+
+def mysql2_adapter_available?
+  require 'active_record/connection_adapters/mysql2_adapter'
+rescue LoadError
+  false
+rescue
+  true
+end
+
+desc 'Default: Run specs'
+task :default => :spec
+
 desc 'Run specs'
 task :spec => ['spec:common', 'spec:integration']
 
 namespace :spec do
   desc 'Run common specs'
-  RSpec::Core::RakeTask.new(:common) do |task|
+  MasterSlaveAdapterRSpecTask.new(:common) do |task|
     task.pattern = './spec/*_spec.rb'
+    task.exclude = /mysql2/ unless mysql2_adapter_available?
     task.verbose = false
   end
 
@@ -26,13 +48,11 @@ namespace :spec do
       end
     end
 
-    desc 'Run all'
-    RSpec::Core::RakeTask.new(:all) do |task|
+    desc 'Run all integration specs'
+    MasterSlaveAdapterRSpecTask.new(:all) do |task|
       task.pattern = './spec/integration/*_spec.rb'
+      task.exclude = /mysql2/ unless mysql2_adapter_available?
       task.verbose = false
     end
   end
 end
-
-desc 'Default: Run specs'
-task :default => :spec

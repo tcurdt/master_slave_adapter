@@ -4,6 +4,6 @@ rvm:
   - 1.9.2
   - 1.9.3
 gemfile:
-  - spec/gemfiles/activerecord2.3-mysql
-  - spec/gemfiles/activerecord3.0-mysql
-  - spec/gemfiles/activerecord3.2-mysql
+  - spec/gemfiles/activerecord2.3
+  - spec/gemfiles/activerecord3.0
+  - spec/gemfiles/activerecord3.2

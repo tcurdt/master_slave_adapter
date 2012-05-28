@@ -10,6 +10,7 @@
 * Fix 1.8.7 compliance
 * Fix bug which led to infinitely connection stack growth
 * Add ActiveRecord 3.x compatibility
+* Add support for Mysql2
 
 # 0.2.0 (April 2, 2012)
 

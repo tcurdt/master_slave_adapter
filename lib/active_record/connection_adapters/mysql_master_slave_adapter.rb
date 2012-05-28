@@ -1,5 +1,6 @@
 require 'active_record/connection_adapters/master_slave_adapter'
 require 'active_record/connection_adapters/master_slave_adapter/clock'
+require 'active_record/connection_adapters/master_slave_adapter/shared_mysql_adapter_methods'
 require 'active_record/connection_adapters/mysql_adapter'
 require 'mysql'
 
@@ -13,59 +14,12 @@ module ActiveRecord
   module ConnectionAdapters
     class MysqlMasterSlaveAdapter < AbstractAdapter
       include MasterSlaveAdapter
-
-      CONNECTION_ERRORS = [
-        Mysql::Error::CR_CONNECTION_ERROR,  # query: not connected
-        Mysql::Error::CR_CONN_HOST_ERROR,   # Can't connect to MySQL server on '%s' (%d)
-        Mysql::Error::CR_SERVER_GONE_ERROR, # MySQL server has gone away
-        Mysql::Error::CR_SERVER_LOST,       # Lost connection to MySQL server during query
-      ]
-
-      def with_consistency(clock)
-        clock =
-          case clock
-          when Clock  then clock
-          when String then Clock.parse(clock)
-          when nil    then Clock.zero
-          end
-
-        super(clock)
-      end
-
-      def master_clock
-        conn = master_connection
-        if status = conn.uncached { select_hash(conn, "SHOW MASTER STATUS") }
-          Clock.new(status['File'], status['Position'])
-        else
-          Clock.infinity
-        end
-      rescue MasterUnavailable
-        Clock.zero
-      rescue ActiveRecordError
-        Clock.infinity
-      end
-
-      def slave_clock(conn)
-        if status = conn.uncached { select_hash(conn, "SHOW SLAVE STATUS") }
-          Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
-        else
-          Clock.zero
-        end
-      rescue ActiveRecordError
-        Clock.zero
-      end
+      include SharedMysqlAdapterMethods
 
     private
 
-      def connection_error?(exception)
-        case exception
-        when ActiveRecord::StatementInvalid
-          CONNECTION_ERRORS.include?(current_connection.raw_connection.errno)
-        when Mysql::Error
-          CONNECTION_ERRORS.include?(exception.errno)
-        else
-          false
-        end
+      def self.mysql_library_class
+        Mysql
       end
 
       if ActiveRecord::ConnectionAdapters::MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
@@ -80,6 +34,7 @@ module ActiveRecord
           conn.select_one(sql)
         end
       end
+
     end
   end
 end

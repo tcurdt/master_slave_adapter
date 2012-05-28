@@ -2,7 +2,7 @@ $: << File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
 
 require 'rspec'
 require 'logger'
-require 'active_record/connection_adapters/mysql_master_slave_adapter'
+require 'active_record/connection_adapters/mysql2_master_slave_adapter'
 
 ActiveRecord::Base.logger =
   Logger.new($stdout).tap { |l| l.level = Logger::DEBUG }
@@ -10,19 +10,19 @@ ActiveRecord::Base.logger =
 module ActiveRecord
   class Base
     cattr_accessor :master_mock, :slave_mock
-    def self.mysql_connection(config)
+    def self.mysql2_connection(config)
       config[:database] == 'slave' ? slave_mock : master_mock
     end
   end
 end
 
-describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
+describe ActiveRecord::ConnectionAdapters::Mysql2MasterSlaveAdapter do
   let(:database_setup) do
     {
       :adapter => 'master_slave',
       :username => 'root',
       :database => 'slave',
-      :connection_adapter => 'mysql',
+      :connection_adapter => 'mysql2',
       :master => { :username => 'root', :database => 'master' },
       :slaves => [{ :database => 'slave' }],
     }
@@ -30,9 +30,9 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
 
   let(:mocked_methods) do
     {
-      :reconnect!  => true,
+      :reconnect! => true,
       :disconnect! => true,
-      :active?     => true,
+      :active? => true,
     }
   end
 
@@ -77,18 +77,13 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
       Clock.new('', pos)
     end
 
-    def supports_prepared_statements?
-      ActiveRecord::ConnectionAdapters::MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
-    end
-
     def select_method
-      supports_prepared_statements? ? :exec_without_stmt : :select_one
+      :select_one
     end
 
     def should_report_clock(pos, connection, log_file, log_pos, sql)
       pos = Array(pos)
       values = pos.map { |p| { log_file => '', log_pos => p } }
-      values.map! { |result| [ result ] } if supports_prepared_statements?
 
       connection.
         should_receive(select_method).exactly(pos.length).times.

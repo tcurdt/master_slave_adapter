@@ -152,7 +152,7 @@ private
   end
 
   def location(name)
-    File.expand_path(File.join("..", "database", name.to_s), File.dirname(__FILE__))
+    File.expand_path(File.join("..", "mysql", name.to_s), File.dirname(__FILE__))
   end
 
   def config(name)

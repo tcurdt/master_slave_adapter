@@ -3,4 +3,4 @@ test/*
 pkg/*
 .rvmrc
 spec/gemfiles/*.lock
-spec/integration/database
+spec/integration/mysql

@@ -22,7 +22,7 @@ module ActiveRecord
         Mysql
       end
 
-      if ActiveRecord::ConnectionAdapters::MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
+      if MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
         # The MysqlAdapter in ActiveRecord > v3.1 uses prepared statements which
         # don't return any results for queries like "SHOW MASTER/SLAVE STATUS",
         # so we have to use normal queries here.

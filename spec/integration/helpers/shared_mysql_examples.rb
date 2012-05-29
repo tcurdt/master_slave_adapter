@@ -114,6 +114,24 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
         end
       end
     end
+
+    context "given we always wait for slave to catch up and be consistent" do
+      before do
+        start_replication
+      end
+
+      it "should always read from slave" do
+        wait_for_replication_sync
+        ActiveRecord::Base.with_consistency(connection.master_clock) do
+          should_read_from :slave
+        end
+        move_master_clock
+        wait_for_replication_sync
+        ActiveRecord::Base.with_consistency(connection.master_clock) do
+          should_read_from :slave
+        end
+      end
+    end
   end
 
   context "given master is not available" do

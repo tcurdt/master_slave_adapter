@@ -86,7 +86,7 @@ module ActiveRecord
         # ActiveRecord v3.x
         alias_method :orig_log, :log
         def log(sql, name = 'SQL', *args, &block)
-          orig_log(sql, "[#{connection_info}] #{name}", *args, &block)
+          orig_log(sql, "[#{connection_info}] #{name || 'SQL'}", *args, &block)
         end
       end
 

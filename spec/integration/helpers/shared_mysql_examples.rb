@@ -48,12 +48,40 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
     stop_slave
   end
 
-  before(:each) do
+  before do
     ActiveRecord::Base.establish_connection(configuration)
   end
 
   it "connects to the database" do
     expect { ActiveRecord::Base.connection }.to_not raise_error
+  end
+
+  context "given a debug logger" do
+    let(:debug_logger) do
+      logger = []
+      def logger.debug(*args)
+        push(args.join)
+      end
+      def logger.debug?
+        true
+      end
+
+      logger
+    end
+
+    before do
+      ActiveRecord::Base.logger = debug_logger
+    end
+
+    after do
+      ActiveRecord::Base.logger = nil
+    end
+
+    it "logs the connection info" do
+      ActiveRecord::Base.connection.select_value("SELECT 42")
+
+      debug_logger.last.should =~ /\[slave:127.0.0.1:3311\] SQL .*SELECT 42/
+    end
   end
 
   context "when asked for master" do

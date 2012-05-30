@@ -4,9 +4,6 @@ require 'rspec'
 require 'logger'
 require 'active_record/connection_adapters/mysql_master_slave_adapter'
 
-ActiveRecord::Base.logger =
-  Logger.new($stdout).tap { |l| l.level = Logger::DEBUG }
-
 module ActiveRecord
   class Base
     cattr_accessor :master_mock, :slave_mock

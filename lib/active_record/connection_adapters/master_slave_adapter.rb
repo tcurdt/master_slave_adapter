@@ -457,7 +457,12 @@ module ActiveRecord
       def connect_to_master
         connect(@config.fetch(:master), :master)
       rescue => exception
-        connection_error?(exception) ? nil : raise
+        if connection_error?(exception)
+          @logger.try(:warn, "Can't connect to master. #{exception.message}")
+          nil
+        else
+          raise
+        end
       end
 
       def on_commit_callbacks

@@ -4,9 +4,6 @@ require 'rspec'
 require 'logger'
 require 'active_record/connection_adapters/master_slave_adapter'
 
-ActiveRecord::Base.logger =
-  Logger.new($stdout).tap { |l| l.level = Logger::DEBUG }
-
 module ActiveRecord
   class Base
     cattr_accessor :master_mock, :slave_mock
@@ -117,19 +114,31 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         end
       end
 
-      it "should send the method '#{method}' to the master connection if there are open transactions" do
-        master_connection.stub!( :open_transactions ).and_return( 1 )
-        master_connection.should_receive( method ).with('testing').and_return( true )
-        ActiveRecord::Base.with_master do
+      context "given there are open transactions" do
+        it "should send the method '#{method}' to the master connection" do
+          master_connection.stub!( :open_transactions ).and_return( 1 )
+          master_connection.should_receive( method ).with('testing').and_return( true )
+
           adapter_connection.send( method, 'testing' )
         end
-      end
 
-      it "should send the method '#{method}' to the master connection if there are open transactions, even in with_slave" do
-        master_connection.stub!( :open_transactions ).and_return( 1 )
-        master_connection.should_receive( method ).with('testing').and_return( true )
-        ActiveRecord::Base.with_slave do
-          adapter_connection.send( method, 'testing' )
+        it "should send the method '#{method}' to the master connection, even in with_slave" do
+          master_connection.stub!( :open_transactions ).and_return( 1 )
+          master_connection.should_receive( method ).with('testing').and_return( true )
+
+          ActiveRecord::Base.with_slave do
+            adapter_connection.send( method, 'testing' )
+          end
+        end
+
+        it "raises MasterUnavailable if master is not available" do
+          master_connection.stub(:open_transactions).and_return(1)
+          master_connection.stub(:connection_error?).and_return(true)
+          master_connection.should_receive(method).with('testing').and_raise(ActiveRecord::StatementInvalid)
+
+          expect do
+            adapter_connection.send(method, 'testing')
+          end.to raise_error(ActiveRecord::MasterUnavailable)
         end
       end
     end # /SelectMethods.each
@@ -139,12 +148,14 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         master_connection.should_receive( method ).and_return( true )
         adapter_connection.send( method )
       end
-    end
 
-    (SchemaStatements - SelectMethods).each do |method|
-      it "should send the method '#{method}' from ActiveRecord::ConnectionAdapters::DatabaseStatements to the master"  do
-        master_connection.should_receive( method ).and_return( true )
-        adapter_connection.send( method )
+      it "should raise MasterSlaveAdapter if master is not available" do
+        master_connection.stub(:connection_error?).and_return(true)
+        master_connection.should_receive(method).and_raise(ActiveRecord::StatementInvalid)
+
+        expect do
+          adapter_connection.send(method)
+        end.to raise_error(ActiveRecord::MasterUnavailable)
       end
     end
 

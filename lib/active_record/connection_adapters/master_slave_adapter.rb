@@ -101,11 +101,10 @@ module ActiveRecord
         super(nil, logger)
 
         @config = config
-
         @connections = {}
         @connections[:master] = connect_to_master
         @connections[:slaves] = @config.fetch(:slaves).map { |cfg| connect(cfg, :slave) }
-
+        @last_seen_slave_clocks = {}
         @disable_connection_test = @config[:disable_connection_test] == 'true'
         @circuit = CircuitBreaker.new(logger)
 
@@ -163,6 +162,10 @@ module ActiveRecord
         on_write { |conn| conn.delete(*args) }
       end
 
+      def execute(*args)
+        on_write { |conn| conn.execute(*args) }
+      end
+
       def commit_db_transaction
         on_write { |conn| conn.commit_db_transaction }
         on_commit_callbacks.shift.call(current_clock) until on_commit_callbacks.blank?
@@ -207,13 +210,6 @@ module ActiveRecord
         connections.each { |connection| connection.clear_query_cache }
       end
 
-      # Someone calling execute directly on the connection is likely to be a
-      # write, respectively some DDL statement. People really shouldn't do that,
-      # but let's delegate this to master, just to be sure.
-      def execute(*args)
-        on_write { |conn| conn.execute(*args) }
-      end
-
       # ADAPTER INTERFACE DELEGATES ===========================================
 
       def self.rescued_delegate(*methods)
@@ -228,13 +224,8 @@ module ActiveRecord
             def #{method}(*args, &block)
               begin
                 #{to}.__send__(:#{method}, *args, &block)
-              rescue => exception
-                if master_connection?(#{to}) && connection_error?(exception)
-                  reset_master_connection
-                  raise MasterUnavailable
-                else
-                  raise
-                end
+              rescue ActiveRecord::StatementInvalid => error
+                master_connection?(#{to}) ? handle_master_error(error) : raise
               end
             end
           EOS
@@ -269,6 +260,7 @@ module ActiveRecord
                        :insert_sql,
                        :update_sql,
                        :delete_sql,
+                       :visitor,
                        :to => :master_connection
       # schema statements
       rescued_delegate :table_exists?,
@@ -301,9 +293,6 @@ module ActiveRecord
                        :add_timestamps,
                        :remove_timestamps,
                        :to => :master_connection
-      # ActiveRecord 3.0
-      rescued_delegate :visitor,
-                       :to => :master_connection
       # no clear interface contract:
       rescued_delegate :tables,         # commented in SchemaStatements
                        :truncate_table, # monkeypatching database_cleaner gem
@@ -316,6 +305,20 @@ module ActiveRecord
                        :table_alias_for,
                        :to => :prefer_master_connection
 
+      # === determine read connection
+      rescued_delegate :select_all,
+                       :select_one,
+                       :select_rows,
+                       :select_value,
+                       :select_values,
+                       :to => :connection_for_read
+
+      # === doesn't really matter, but must be handled by underlying adapter
+      rescued_delegate *(ActiveRecord::ConnectionAdapters::Quoting.instance_methods + [{
+                       :to => :current_connection }])
+      # issue #4: current_database is not supported by all adapters, though
+      rescued_delegate :current_database, :to => :current_connection
+
       # ok, we might have missed more
       def method_missing(name, *args, &blk)
         master_connection.send(name.to_sym, *args, &blk).tap do
@@ -327,33 +330,9 @@ module ActiveRecord
             Thank you.
           })
         end
-      rescue => exception
-        if connection_error?(exception)
-          reset_master_connection
-          raise MasterUnavailable
-        else
-          raise
-        end
+      rescue ActiveRecord::StatementInvalid => exception
+        handle_master_error(exception)
       end
-
-      # === determine read connection
-      rescued_delegate :select_all,
-                       :select_one,
-                       :select_rows,
-                       :select_value,
-                       :select_values,
-                       :to => :connection_for_read
-
-      def connection_for_read
-        open_transaction? ? master_connection : current_connection
-      end
-      private :connection_for_read
-
-      # === doesn't really matter, but must be handled by underlying adapter
-      rescued_delegate *(ActiveRecord::ConnectionAdapters::Quoting.instance_methods + [{
-                       :to => :current_connection }])
-      # issue #4: current_database is not supported by all adapters, though
-      rescued_delegate :current_database, :to => :current_connection
 
       # UTIL ==================================================================
 
@@ -404,6 +383,14 @@ module ActiveRecord
 
     protected
 
+      def open_transaction?
+        master_available? ? (master_connection.open_transactions > 0) : false
+      end
+
+      def connection_for_read
+        open_transaction? ? master_connection : current_connection
+      end
+
       def prefer_master_connection
         master_available? ? master_connection : slave_connection!
       end
@@ -416,49 +403,19 @@ module ActiveRecord
         @connections[:master] = nil
       end
 
-      def current_clock=(clock)
-        @master_slave_clock = clock
-      end
-
       def slave_consistent?(conn, clock)
-        if get_last_seen_slave_clock(conn).try(:>=, clock)
+        if @last_seen_slave_clocks[conn].try(:>=, clock)
           true
         elsif (slave_clk = slave_clock(conn))
-          set_last_seen_slave_clock(conn, slave_clk)
+          @last_seen_slave_clocks[conn] = clock
           slave_clk >= clock
         else
           false
         end
       end
 
-      def on_write
-        with(master_connection) do |conn|
-          yield(conn).tap do
-            unless open_transaction?
-              if mc = master_clock
-                self.current_clock = mc unless current_clock.try(:>=, mc)
-              end
-              # keep using master after write
-              connection_stack.replace([ conn ])
-            end
-          end
-        end
-      end
-
-      def with(conn)
-        self.current_connection = conn
-        yield(conn).tap { connection_stack.shift if connection_stack.size > 1 }
-      end
-
-    private
-
-      def connect(cfg, name)
-        adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
-        ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
-      end
-
-      def open_transaction?
-        master_available? ? (master_connection.open_transactions > 0) : false
+      def current_clock=(clock)
+        @master_slave_clock = clock
       end
 
       def connection_stack
@@ -469,20 +426,32 @@ module ActiveRecord
         connection_stack.unshift(conn)
       end
 
-      def on_commit_callbacks
-        @on_commit_callbacks ||= []
+      def on_write
+        with(master_connection) do |conn|
+          yield(conn).tap do
+            unless open_transaction?
+              master_clk = master_clock
+              unless current_clock.try(:>=, master_clk)
+                self.current_clock = master_clk
+              end
+
+              # keep using master after write
+              connection_stack.replace([ conn ])
+            end
+          end
+        end
       end
 
-      def on_rollback_callbacks
-        @on_rollback_callbacks ||= []
+      def with(conn)
+        self.current_connection = conn
+        yield(conn).tap { connection_stack.shift if connection_stack.size > 1 }
+      rescue ActiveRecord::StatementInvalid => exception
+        handle_master_error(exception)
       end
 
-      def get_last_seen_slave_clock(conn)
-        conn.instance_variable_get(:@last_seen_slave_clock)
-      end
-
-      def set_last_seen_slave_clock(conn, clock)
-        conn.instance_variable_set(:@last_seen_slave_clock, clock)
+      def connect(cfg, name)
+        adapter_method = "#{cfg.fetch(:adapter)}_connection".to_sym
+        ActiveRecord::Base.send(adapter_method, { :name => name }.merge(cfg))
       end
 
       def connect_to_master
@@ -491,8 +460,25 @@ module ActiveRecord
         connection_error?(exception) ? nil : raise
       end
 
+      def on_commit_callbacks
+        @on_commit_callbacks ||= []
+      end
+
+      def on_rollback_callbacks
+        @on_rollback_callbacks ||= []
+      end
+
       def connection_error?(exception)
         raise NotImplementedError
+      end
+
+      def handle_master_error(exception)
+        if connection_error?(exception)
+          reset_master_connection
+          raise MasterUnavailable
+        else
+          raise exception
+        end
       end
 
       def circuit

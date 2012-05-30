@@ -18,12 +18,29 @@ module ActiveRecord
 
     private
 
-      def self.mysql_library_class
-        Mysql2
-      end
-
       def select_hash(conn, sql)
         conn.select_one(sql)
+      end
+
+      CONNECTION_ERRORS = {
+        2002 => "query: not connected",                         # CR_CONNECTION_ERROR
+        2003 => "Can't connect to MySQL server on",             # CR_CONN_HOST_ERROR
+        2006 => "MySQL server has gone away",                   # CR_SERVER_GONE_ERROR
+        2013 => "Lost connection to MySQL server during query", # CR_SERVER_LOST
+        -1   => "closed MySQL connection",                      # defined by Mysql2
+      }
+
+      def connection_error?(exception)
+        case exception
+        when ActiveRecord::StatementInvalid
+          CONNECTION_ERRORS.values.any? do |description|
+            exception.message.start_with?("Mysql2::Error: #{description}")
+          end
+        when Mysql2::Error
+          CONNECTION_ERRORS.keys.include?(exception.errno)
+        else
+          false
+        end
       end
 
     end

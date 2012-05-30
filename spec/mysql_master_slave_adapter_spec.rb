@@ -326,4 +326,48 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
       end
     end
   end # /with_consistency
+
+  describe "connection error detection" do
+    {
+      Mysql::Error::CR_CONNECTION_ERROR   => "query: not connected",
+      Mysql::Error::CR_CONN_HOST_ERROR    => "Can't connect to MySQL server on 'localhost' (3306)",
+      Mysql::Error::CR_SERVER_GONE_ERROR  => "MySQL server has gone away",
+      Mysql::Error::CR_SERVER_LOST        => "Lost connection to MySQL server during query",
+    }.each do |errno, description|
+      it "raises MasterUnavailable for '#{description}' during query execution" do
+        master_connection.stub_chain(:raw_connection, :errno).and_return(errno)
+        master_connection.should_receive(:insert).and_raise(ActiveRecord::StatementInvalid.new("Mysql::Error: #{description}: INSERT 42"))
+
+        expect do
+          adapter_connection.insert("INSERT 42")
+        end.to raise_error(ActiveRecord::MasterUnavailable)
+      end
+
+      it "doesn't raise anything for '#{description}' during connection" do
+        error = Mysql::Error.new(description)
+        error.stub(:errno).and_return(errno)
+        ActiveRecord::Base.should_receive(:mysql_connection).twice do |config|
+          if config[:name] == :master
+            raise error
+          else
+            slave_connection
+          end
+        end
+
+        expect do
+          ActiveRecord::Base.connection_handler.clear_all_connections!
+          ActiveRecord::Base.connection
+        end.to_not raise_error
+      end
+    end
+
+    it "raises StatementInvalid for other errors" do
+      master_connection.stub_chain(:raw_connection, :errno).and_return(Mysql::Error::ER_QUERY_INTERRUPTED)
+      master_connection.should_receive(:insert).and_raise(ActiveRecord::StatementInvalid.new("Mysql::Error: Query execution was interrupted: INSERT 42"))
+
+      expect do
+        adapter_connection.insert("INSERT 42")
+      end.to raise_error(ActiveRecord::StatementInvalid)
+    end
+  end
 end

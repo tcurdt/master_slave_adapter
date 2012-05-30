@@ -20,6 +20,8 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
     }
   end
 
+  let(:test_table) { MysqlHelper::TEST_TABLE }
+
   def connection
     ActiveRecord::Base.connection
   end
@@ -159,6 +161,26 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
           should_read_from :slave
         end
       end
+    end
+  end
+
+  context "given master goes away in between queries" do
+    let(:query) { "INSERT INTO #{test_table} (message) VALUES ('test')" }
+
+    after do
+      start_master
+    end
+
+    it "raises a MasterUnavailable exception" do
+      expect do
+        ActiveRecord::Base.connection.insert(query)
+      end.to_not raise_error
+
+      stop_master
+
+      expect do
+        ActiveRecord::Base.connection.insert(query)
+      end.to raise_error(ActiveRecord::MasterUnavailable)
     end
   end
 

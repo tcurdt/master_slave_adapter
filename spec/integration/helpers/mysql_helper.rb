@@ -103,11 +103,11 @@ module MysqlHelper
 private
 
   def slave_status
-    status(:slave)[5..6]
+    status(:slave).values_at(9, 21)
   end
 
   def master_status
-    status(:master)[0..1]
+    status(:master).values_at(0, 1)
   end
 
   def status(name)

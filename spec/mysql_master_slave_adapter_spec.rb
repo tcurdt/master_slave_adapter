@@ -343,13 +343,7 @@ describe ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter do
       it "doesn't raise anything for '#{description}' during connection" do
         error = Mysql::Error.new(description)
         error.stub(:errno).and_return(errno)
-        ActiveRecord::Base.should_receive(:mysql_connection).twice do |config|
-          if config[:name] == :master
-            raise error
-          else
-            slave_connection
-          end
-        end
+        ActiveRecord::Base.should_receive(:master_mock).and_raise(error)
 
         expect do
           ActiveRecord::Base.connection_handler.clear_all_connections!

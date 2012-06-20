@@ -1,7 +1,9 @@
+require 'active_record/connection_adapters/master_slave_adapter/clock'
+
 module ActiveRecord
   module ConnectionAdapters
     module MasterSlaveAdapter
-      module SharedMysqlAdapterMethods
+      module SharedMysqlAdapterBehavior
         def with_consistency(clock)
           clock =
             case clock

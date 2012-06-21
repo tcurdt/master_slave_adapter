@@ -1,7 +1,7 @@
 require 'fileutils'
 require 'timeout'
 
-module MysqlHelper
+module MysqlSetupHelper
   MASTER_ID   = "1"
   MASTER_PORT = 3310
   SLAVE_ID    = "2"

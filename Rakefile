@@ -31,7 +31,7 @@ task :spec => ['spec:common', 'spec:integration']
 namespace :spec do
   desc 'Run common specs'
   MasterSlaveAdapterRSpecTask.new(:common) do |task|
-    task.pattern = './spec/*_spec.rb'
+    task.pattern = './spec/common/*_spec.rb'
     task.exclude = /mysql2/ unless mysql2_adapter_available?
     task.verbose = false
   end

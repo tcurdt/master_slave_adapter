@@ -1,7 +1,6 @@
-$: << File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
+$: << File.expand_path(File.join(File.dirname( __FILE__ ), '..', '..', 'lib'))
 
 require 'rspec'
-require 'logger'
 require 'active_record/connection_adapters/mysql2_master_slave_adapter'
 
 module ActiveRecord

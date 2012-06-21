@@ -1,7 +1,7 @@
-require 'integration/helpers/mysql_helper'
+require 'integration/support/mysql_setup_helper'
 
 shared_examples_for "a MySQL MasterSlaveAdapter" do
-  include MysqlHelper
+  include MysqlSetupHelper
 
   let(:configuration) do
     {
@@ -20,7 +20,7 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
     }
   end
 
-  let(:test_table) { MysqlHelper::TEST_TABLE }
+  let(:test_table) { MysqlSetupHelper::TEST_TABLE }
 
   def connection
     ActiveRecord::Base.connection

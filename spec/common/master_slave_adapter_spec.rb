@@ -1,7 +1,6 @@
-$: << File.expand_path(File.join(File.dirname(__FILE__), '..', 'lib'))
+$: << File.expand_path(File.join(File.dirname( __FILE__ ), '..', '..', 'lib'))
 
 require 'rspec'
-require 'logger'
 require 'active_record/connection_adapters/master_slave_adapter'
 
 module ActiveRecord
@@ -27,7 +26,6 @@ module ActiveRecord
       end
 
       def connection_error?(exception)
-        true
       end
     end
   end
@@ -132,8 +130,8 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         end
 
         it "raises MasterUnavailable if master is not available" do
+          adapter_connection.stub(:connection_error?).and_return(true)
           master_connection.stub(:open_transactions).and_return(1)
-          master_connection.stub(:connection_error?).and_return(true)
           master_connection.should_receive(method).with('testing').and_raise(ActiveRecord::StatementInvalid)
 
           expect do
@@ -150,7 +148,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       end
 
       it "should raise MasterSlaveAdapter if master is not available" do
-        master_connection.stub(:connection_error?).and_return(true)
+        adapter_connection.stub(:connection_error?).and_return(true)
         master_connection.should_receive(method).and_raise(ActiveRecord::StatementInvalid)
 
         expect do

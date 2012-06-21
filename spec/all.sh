@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source ~/.rvm/scripts/rvm
+source `which rvm | sed 's/rvm\/bin/rvm\/scripts/'`
 
 for ruby in 1.8.7 1.9.2 1.9.3; do
   rvm use $ruby

@@ -1,11 +1,12 @@
 $: << File.expand_path(File.join(File.dirname( __FILE__ ), '..', '..', 'lib'))
 
 require 'rspec'
-require 'active_record/connection_adapters/master_slave_adapter'
+require 'common/support/connection_setup_helper'
 
 module ActiveRecord
   class Base
     cattr_accessor :master_mock, :slave_mock
+
     def self.test_connection(config)
       config[:database] == 'slave' ? slave_mock : master_mock
     end
@@ -32,58 +33,8 @@ module ActiveRecord
 end
 
 describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
-  let(:default_database_setup) do
-    {
-      :adapter => 'master_slave',
-      :username => 'root',
-      :database => 'slave',
-      :connection_adapter => 'test',
-      :master => { :username => 'root', :database => 'master' },
-      :slaves => [{ :database => 'slave' }],
-    }
-  end
-
-  let(:database_setup) { default_database_setup }
-
-  let(:mocked_methods) do
-    {
-      :reconnect! => true,
-      :disconnect! => true,
-      :active? => true,
-    }
-  end
-
-  let!(:master_connection) do
-    mock(
-      'master connection',
-      mocked_methods.merge(:open_transactions => 0)
-    ).tap do |conn|
-      conn.stub!(:uncached).and_yield
-      ActiveRecord::Base.master_mock = conn
-    end
-  end
-
-  let!(:slave_connection) do
-    mock('slave connection', mocked_methods).tap do |conn|
-      conn.stub!(:uncached).and_yield
-      ActiveRecord::Base.slave_mock = conn
-    end
-  end
-
-  def adapter_connection
-    ActiveRecord::Base.connection
-  end
-
-  SchemaStatements = ActiveRecord::ConnectionAdapters::SchemaStatements.public_instance_methods.map(&:to_sym)
-  SelectMethods = [ :select_all, :select_one, :select_rows, :select_value, :select_values ] unless defined?(SelectMethods)
-
-  before do
-    ActiveRecord::Base.establish_connection(database_setup)
-  end
-
-  after do
-    ActiveRecord::Base.connection_handler.clear_all_connections!
-  end
+  include_context 'connection setup'
+  let(:connection_adapter) { 'test' }
 
   describe 'common configuration' do
     it "should call 'columns' on master" do

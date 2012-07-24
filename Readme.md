@@ -180,6 +180,16 @@ development:
     - host: slave02
 ```
 
+## Testing
+
+You can execute all tests against your current ruby version via:
+
+    rake spec
+
+In case you have `rvm` installed, you can test against 1.8.7, 1.9.2 and 1.9.3 as well as ActiveRecord 2 and 3 via:
+
+    bash spec/all.sh
+
 ## Credits
 
 * Maurício Lenhares - _original master_slave_adapter plugin_

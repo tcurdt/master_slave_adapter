@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.version     = ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::VERSION
   s.platform    = Gem::Platform::RUBY
   s.authors     = [ 'Mauricio Linhares', 'Torsten Curdt', 'Kim Altintop', 'Omid Aladini', 'Tiago Loureiro', 'Tobias Schmidt', 'SoundCloud' ]
-  s.email       = %q{kim@soundcloud.com tcurdt@soundcloud.com ts@soundcloud}
+  s.email       = %q{tiago@soundcloud.com ts@soundcloud.com}
   s.homepage    = 'http://github.com/soundcloud/master_slave_adapter'
   s.summary     = %q{Replication Aware Master/Slave Database Adapter for ActiveRecord}
   s.description = %q{(MySQL) Replication Aware Master/Slave Database Adapter for ActiveRecord}

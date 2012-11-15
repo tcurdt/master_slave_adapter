@@ -1,4 +1,8 @@
-# 1.0.0 (not released yet)
+# 1.1.0 (November 15, 2012)
+
+* [BUGFIX] Don't raise MasterUnavailable if a slave is unavailable
+
+# 1.0.0 (July 24, 2012)
 
 * Add support for unavailable master connection
 * Restrict the public interface. Removed the following methods:

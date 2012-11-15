@@ -90,6 +90,19 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
           end.to raise_error(ActiveRecord::MasterUnavailable)
         end
       end
+
+      context 'given slave is not available' do
+        it 'raises statement invalid exception' do
+          adapter_connection.stub(:connection_error?).and_return(true)
+          slave_connection.should_receive(method).with('testing').and_raise(ActiveRecord::StatementInvalid)
+
+          expect do
+            ActiveRecord::Base.with_slave do
+              adapter_connection.send(method, 'testing')
+            end
+          end.to raise_error(ActiveRecord::StatementInvalid)
+        end
+      end
     end # /SelectMethods.each
 
     SchemaStatements.each do |method|

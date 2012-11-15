@@ -225,7 +225,7 @@ module ActiveRecord
               begin
                 #{to}.__send__(:#{method}, *args, &block)
               rescue ActiveRecord::StatementInvalid => error
-                master_connection?(#{to}) ? handle_master_error(error) : raise
+                handle_error(#{to}, error)
               end
             end
           EOS
@@ -331,7 +331,7 @@ module ActiveRecord
           })
         end
       rescue ActiveRecord::StatementInvalid => exception
-        handle_master_error(exception)
+        handle_error(master_connection, exception)
       end
 
       # UTIL ==================================================================
@@ -442,11 +442,11 @@ module ActiveRecord
         end
       end
 
-      def with(conn)
-        self.current_connection = conn
-        yield(conn).tap { connection_stack.shift if connection_stack.size > 1 }
+      def with(connection)
+        self.current_connection = connection
+        yield(connection).tap { connection_stack.shift if connection_stack.size > 1 }
       rescue ActiveRecord::StatementInvalid => exception
-        handle_master_error(exception)
+        handle_error(connection, exception)
       end
 
       def connect(cfg, name)
@@ -477,8 +477,8 @@ module ActiveRecord
         raise NotImplementedError
       end
 
-      def handle_master_error(exception)
-        if connection_error?(exception)
+      def handle_error(connection, exception)
+        if master_connection?(connection) && connection_error?(exception)
           reset_master_connection
           raise MasterUnavailable
         else

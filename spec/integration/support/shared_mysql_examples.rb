@@ -22,6 +22,8 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
 
   let(:test_table) { MysqlSetupHelper::TEST_TABLE }
 
+  let(:logger) { nil }
+
   def connection
     ActiveRecord::Base.connection
   end
@@ -52,6 +54,8 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
 
   before do
     ActiveRecord::Base.establish_connection(configuration)
+    ActiveRecord::Base.logger = logger
+    ActiveRecord::Base.connection.should be_active
   end
 
   it "connects to the database" do
@@ -59,7 +63,7 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
   end
 
   context "given a debug logger" do
-    let(:debug_logger) do
+    let(:logger) do
       logger = []
       def logger.debug(*args)
         push(args.join)
@@ -71,18 +75,10 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
       logger
     end
 
-    before do
-      ActiveRecord::Base.logger = debug_logger
-    end
-
-    after do
-      ActiveRecord::Base.logger = nil
-    end
-
     it "logs the connection info" do
       ActiveRecord::Base.connection.select_value("SELECT 42")
 
-      debug_logger.last.should =~ /\[slave:127.0.0.1:3311\] SQL .*SELECT 42/
+      logger.last.should =~ /\[slave:127.0.0.1:3311\] SQL .*SELECT 42/
     end
   end
 
@@ -185,11 +181,11 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
   end
 
   context "given master is not available" do
-    before(:all) do
+    before do
       stop_master
     end
 
-    after(:all) do
+    after do
       start_master
     end
 
@@ -209,4 +205,24 @@ shared_examples_for "a MySQL MasterSlaveAdapter" do
       end
     end
   end
+
+  context "given slave is not available" do
+    before do
+      stop_slave
+    end
+
+    after do
+      start_slave
+    end
+
+    context "when asked for slave" do
+      it "fails" do
+        expect do
+          ActiveRecord::Base.with_slave { should_read_from :slave }
+        end.to raise_error(ActiveRecord::StatementInvalid)
+      end
+    end
+
+  end
+
 end

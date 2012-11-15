@@ -73,14 +73,13 @@ module MysqlSetupHelper
     [:master, :slave].each do |name|
       path        = location(name)
       config_path = File.join(path, "my.cnf")
-      data_path   = File.join(path, "data")
       base_dir    = File.dirname(File.dirname(`which mysql_install_db`))
 
       FileUtils.rm_rf(path)
       FileUtils.mkdir_p(path)
       File.open(config_path, "w") { |file| file << config(name) }
 
-      `mysql_install_db --basedir='#{base_dir}' --datadir='#{data_path}'`
+      `mysql_install_db --defaults-file='#{config_path}' --basedir='#{base_dir}' --user=''`
     end
   end
 
@@ -160,15 +159,17 @@ private
 
     <<-EOS
 [mysqld]
-pid-file = #{path}/mysqld.pid
-socket = #{path}/mysqld.sock
-port = #{port(name)}
-log-error = #{path}/error.log
-datadir = #{path}/data
-log-bin = #{name}-bin
-log-bin-index = #{name}-bin.index
-server-id = #{server_id(name)}
-lower_case_table_names = 1
+pid-file                = #{path}/mysqld.pid
+socket                  = #{path}/mysqld.sock
+port                    = #{port(name)}
+log-error               = #{path}/error.log
+datadir                 = #{path}/data
+log-bin                 = #{name}-bin
+log-bin-index           = #{name}-bin.index
+server-id               = #{server_id(name)}
+lower_case_table_names  = 1
+sql-mode                = ''
+replicate-ignore-db     = mysql
     EOS
   end
 end

@@ -17,7 +17,7 @@ module ActiveRecord
 
         def master_clock
           conn = master_connection
-          if status = conn.uncached { select_hash(conn, "SHOW MASTER STATUS") }
+          if status = conn.uncached { conn.select_one("SHOW MASTER STATUS") }
             Clock.new(status['File'], status['Position'])
           else
             Clock.infinity
@@ -29,7 +29,7 @@ module ActiveRecord
         end
 
         def slave_clock(conn)
-          if status = conn.uncached { select_hash(conn, "SHOW SLAVE STATUS") }
+          if status = conn.uncached { conn.select_one("SHOW SLAVE STATUS") }
             Clock.new(status['Relay_Master_Log_File'], status['Exec_Master_Log_Pos'])
           else
             Clock.zero

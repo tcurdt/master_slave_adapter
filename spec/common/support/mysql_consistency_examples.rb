@@ -11,22 +11,12 @@ shared_examples_for 'mysql consistency' do
     Clock.new('', pos)
   end
 
-  def supports_prepared_statements?
-    described_class == ActiveRecord::ConnectionAdapters::MysqlMasterSlaveAdapter &&
-    ActiveRecord::ConnectionAdapters::MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
-  end
-
-  def select_method
-    supports_prepared_statements? ? :exec_without_stmt : :select_one
-  end
-
   def should_report_clock(pos, connection, log_file, log_pos, sql)
     pos = Array(pos)
     values = pos.map { |p| { log_file => '', log_pos => p } }
-    values.map! { |result| [ result ] } if supports_prepared_statements?
 
     connection.
-      should_receive(select_method).exactly(pos.length).times.
+      should_receive(:select_one).exactly(pos.length).times.
       with(sql).
       and_return(*values)
   end

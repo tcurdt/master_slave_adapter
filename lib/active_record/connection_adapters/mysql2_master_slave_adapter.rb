@@ -18,10 +18,6 @@ module ActiveRecord
 
     private
 
-      def select_hash(conn, sql)
-        conn.select_one(sql)
-      end
-
       CONNECTION_ERRORS = {
         2002 => "query: not connected",                         # CR_CONNECTION_ERROR
         2003 => "Can't connect to MySQL server on",             # CR_CONN_HOST_ERROR

@@ -17,19 +17,6 @@ module ActiveRecord
 
     private
 
-      if MysqlAdapter.instance_methods.map(&:to_sym).include?(:exec_without_stmt)
-        # The MysqlAdapter in ActiveRecord > v3.1 uses prepared statements which
-        # don't return any results for queries like "SHOW MASTER/SLAVE STATUS",
-        # so we have to use normal queries here.
-        def select_hash(conn, sql)
-          conn.exec_without_stmt(sql).first
-        end
-      else
-        def select_hash(conn, sql)
-          conn.select_one(sql)
-        end
-      end
-
       CONNECTION_ERRORS = [
         Mysql::Error::CR_CONNECTION_ERROR,  # query: not connected
         Mysql::Error::CR_CONN_HOST_ERROR,   # Can't connect to MySQL server on '%s' (%d)

@@ -210,6 +210,10 @@ module ActiveRecord
         connections.each { |connection| connection.clear_query_cache }
       end
 
+      def outside_transaction?
+        nil
+      end
+
       # ADAPTER INTERFACE DELEGATES ===========================================
 
       def self.rescued_delegate(*methods)
@@ -249,7 +253,6 @@ module ActiveRecord
                        :release_savepoint,
                        :current_savepoint_name,
                        :begin_db_transaction,
-                       :outside_transaction?,
                        :add_limit!,
                        :default_sequence_name,
                        :reset_sequence!,

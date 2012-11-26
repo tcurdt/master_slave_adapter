@@ -183,8 +183,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
       %w(begin_db_transaction
          commit_db_transaction
          increment_open_transactions
-         decrement_open_transactions
-         outside_transaction?).each do |txstmt|
+         decrement_open_transactions).each do |txstmt|
         master_connection.
           should_receive(txstmt).exactly(1).times
       end
@@ -209,8 +208,7 @@ describe ActiveRecord::ConnectionAdapters::MasterSlaveAdapter do
         master_connection.
           should_receive(txstmt).exactly(1).times
       end
-      master_connection.
-        should_receive('outside_transaction?').exactly(2).times
+
       master_connection.
         should_receive('open_transactions').exactly(3).times.
         and_return(0, 1, 0)

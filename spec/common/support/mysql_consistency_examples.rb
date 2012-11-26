@@ -107,8 +107,7 @@ shared_examples_for 'mysql consistency' do
     %w(begin_db_transaction
        commit_db_transaction
        increment_open_transactions
-       decrement_open_transactions
-       outside_transaction?).each do |txstmt|
+       decrement_open_transactions).each do |txstmt|
       master_connection.should_receive(txstmt).exactly(1).times
     end
 

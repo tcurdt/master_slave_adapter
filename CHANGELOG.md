@@ -1,3 +1,7 @@
+# 1.1.2 (November 26, 2012)
+
+  * Avoid trying to connect to master twice if unavailable
+
 # 1.1.1 (November 17, 2012)
 
   * [BUGFIX] Fix activerecord 3.2 compatibility

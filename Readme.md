@@ -1,4 +1,4 @@
-# Replication Aware Master Slave Adapter
+# Replication Aware Master Slave Adapter [![Build Status](https://secure.travis-ci.org/soundcloud/master_slave_adapter.png)][6]
 
 Improved version of the [master_slave_adapter plugin][1], packaged as a gem.
 
@@ -6,19 +6,17 @@ Improved version of the [master_slave_adapter plugin][1], packaged as a gem.
 
 1. automatic selection of master or slave connection: `with_consistency`
 2. manual selection of master or slave connection: `with_master`, `with_slave`
-3. transaction callbacks: `on_commit`, `on_rollback`
-4. also:
+3. handles master unavailable scenarios gracefully
+4. transaction callbacks: `on_commit`, `on_rollback`
+5. also:
   * support for multiple slaves
   * (partial) support for [database_cleaner][2]
 
 ### Automatic Selection of Master or Slave
 
-* _note that this feature currently only works with MySQL_
-* _see also this [blog post][3] for a more detailed explanation_
-
 The adapter will run all reads against a slave database, unless a) the read is inside an open transaction or b) the
 adapter determines that the slave lags behind the master _relative to the last write_. For this to work, an initial
-initial consistency requirement ("`Clock`") must be passed to the adapter. Based on this clock value, the adapter
+initial consistency requirement, a Clock, must be passed to the adapter. Based on this clock value, the adapter
 determines if a (randomly chosen) slave meets this requirement. If not, all statements are executed against master,
 otherwise, the slave connection is used until either a transaction is opened or a write occurs. After a successful write
 or transaction, the adapter determines a new consistency requirement, which is returned and can be used for subsequent
@@ -29,20 +27,16 @@ As an example, a Rails application could run the following function as an `aroun
 ```ruby
 def with_consistency_filter
   if logged_in?
-    # it's a good idea to use this feature on a per-user basis
-    cache_key = [ CACHE_NAMESPACE, current_user.id.to_s ].join(":")
-
-    clock = cached_clock(cache_key) ||
-      ActiveRecord::Base.connection.master_clock
+    clock = cached_clock_for(current_user)
 
     new_clock = ActiveRecord::Base.with_consistency(clock) do
-        # inside the controller, ActiveRecord models can be used just as normal.
-        # The adapter will take care of choosing the right connection.
-        yield
-      end
+      # inside the controller, ActiveRecord models can be used just as normal.
+      # The adapter will take care of choosing the right connection.
+      yield
+    end
 
     [ new_clock, clock ].compact.max.tap do |c|
-      cache_clock!(cache_key, c)
+      cache_clock_for(current_user, c)
     end if new_clock != clock
   else
     # anonymous users will have to wait until the slaves have caught up
@@ -51,12 +45,14 @@ def with_consistency_filter
 end
 ```
 
-Note that we use the current `master_clock` as a reference point. This will give the user a recent view of the data,
+Note that we use the last seen consistency for a given user as reference point. This will give the user a recent view of the data,
 possibly reading from master, and if no write occurs inside the `with_consistency` block, we have a reasonable value to
-cache and reuse on subsequent requests. Alternatively, we could have used
-`ActiveRecord::ConnectionAdapters::MasterSlaveAdapter::Clock.zero` to indicate no particular consistency requirement.
+cache and reuse on subsequent requests.
+If no cached clock is available, this indicates that no particular consistency is required. Any slave connection will do.
 Since `with_consistency` blocks can be nested, the controller code could later decide to require a more recent view on
 the data.
+
+_See also this [blog post][3] for a more detailed explanation._
 
 ### Manual Selection of Master or Slave
 
@@ -75,6 +71,24 @@ end
 ```
 
 `with_master`, `with_slave` as well as `with_consistency` can be nested deliberately.
+
+### Handles master unavailable scenarios gracefully
+
+Due to scenarios when the master is possibly down (e.g., maintenance), we try
+to delegate as much as possible to the active slaves. In order to accomplish
+this we have added the following functionalities.
+
+ * We ignore errors while connecting to the master server.
+ * ActiveRecord::MasterUnavailable exceptions are raised in cases when we need to use
+   a master connection, but the server is unavailable. This exception is propagated
+   to the application.
+ * We have introduced the circuit breaker pattern in the master reconnect logic
+   to prevent excessive reconnection attempts. We block any queries which require
+   a master connection for a given timeout (by default, 30 seconds). After the
+   timeout has expired, any attempt of using the master connection will trigger
+   a reconnection.
+ * The master slave adapter is still usable for any queries that require only
+   slave connections.
 
 ### Transaction Callbacks
 
@@ -123,6 +137,24 @@ At [SoundCloud][4], we're using [database_cleaner][2]'s 'truncation strategy' to
 `truncate_table` as an `ActiveRecord::Base.connection` instance method. We might add other strategies if there's enough
 interest.
 
+## Requirements
+
+MasterSlaveAdapter requires ActiveRecord with a version >= 2.3, is compatible
+with at least Ruby 1.8.7, 1.9.2, 1.9.3 and comes with built-in support for mysql
+and mysql2 libraries.
+
+You can check the versions it's tested against at [Travis CI](http://travis-ci.org/#!/soundcloud/master_slave_adapter).
+
+## Installation
+
+Using plain rubygems:
+
+    $ gem install master_slave_adapter
+
+Using bundler, just include it in your Gemfile:
+
+    gem 'master_slave_adapter'
+
 ## Configuration
 
 Example configuration for the development environment in `database.yml`:
@@ -133,6 +165,7 @@ development:
   connection_adapter: mysql      # actual adapter to use (only mysql is supported atm)
   disable_connection_test: false # when an instance is checked out from the connection pool,
                                  # we check if the connections are still alive, reconnecting if necessary
+
   # these values are picked up as defaults in the 'master' and 'slaves' sections:
   database: aweapp_development
   username: aweappuser
@@ -147,22 +180,15 @@ development:
     - host: slave02
 ```
 
-## Installation
+## Testing
 
-Using plain rubygems:
+You can execute all tests against your current ruby version via:
 
-```sh
-$ gem install master_slave_adapter_soundcloud
-```
+    rake spec
 
-Using bundler:
+In case you have `rvm` installed, you can test against 1.8.7, 1.9.2 and 1.9.3 as well as ActiveRecord 2 and 3 via:
 
-```sh
-$ cat >> Gemfile
-gem 'master_slave_adapter_soundcloud', '~> 0.1', :require => 'master_slave_adaper'
-^D
-$ bundle install
-```
+    bash spec/all.sh
 
 ## Credits
 
@@ -171,6 +197,8 @@ $ bundle install
 * Sean Treadway     - _chief everything & transaction callbacks_
 * Kim Altintop      - _strong lax monoidal endofunctors_
 * Omid Aladini      - _chief operator & everything else_
+* Tiago Loureiro    - _review expert & master unavailable handling_
+* Tobias Schmidt    - _typo master & activerecord ranter_
 
 
 [1]: https://github.com/mauricio/master_slave_adapter
@@ -178,3 +206,4 @@ $ bundle install
 [3]: http://www.yourdailygeekery.com/2011/06/14/master-slave-consistency.html
 [4]: http://backstage.soundcloud.com
 [5]: http://cukes.info
+[6]: http://travis-ci.org/soundcloud/master_slave_adapter

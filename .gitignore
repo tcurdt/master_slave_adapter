@@ -1,3 +1,6 @@
 tags
 test/*
 pkg/*
+.rvmrc
+spec/gemfiles/*.lock
+spec/integration/mysql
